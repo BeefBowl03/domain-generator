@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domain Generator - High-Ticket Dropshipping</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-globe"></i> Domain Generator</h1>
+                <p>Find the perfect domain for your high-ticket dropshipping store</p>
+            </div>
+        </header>
+
+        <main class="main">
+            <div class="search-section">
+                <div class="search-card">
+                    <h2>Enter Your Niche</h2>
+                    <div class="search-form">
+                        <div class="input-group">
+                            <input type="text" id="nicheInput" placeholder="e.g., backyard, marine, horse riding, smart home..." />
+                            <button id="generateBtn" class="btn-primary">
+                                <i class="fas fa-search"></i>
+                                Generate Domains
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loadingSection" class="loading-section hidden">
+                <div class="loading-card">
+                    <div class="spinner"></div>
+                    <h3>Generating Domains...</h3>
+                    <div class="loading-steps">
+                        <div class="step" id="step1">
+                            <i class="fas fa-search"></i>
+                            <span>Finding similar stores</span>
+                        </div>
+                        <div class="step" id="step2">
+                            <i class="fas fa-chart-line"></i>
+                            <span>Analyzing domain patterns</span>
+                        </div>
+                        <div class="step" id="step3">
+                            <i class="fas fa-magic"></i>
+                            <span>Generating domain suggestions</span>
+                        </div>
+                        <div class="step" id="step4">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Checking availability & pricing</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="resultsSection" class="results-section hidden">
+                <!-- Competitor Analysis -->
+                <div class="analysis-card">
+                    <h3><i class="fas fa-store"></i> Competitor Analysis</h3>
+                    <div id="competitorsList" class="competitors-list"></div>
+                </div>
+
+                <!-- Domain Patterns Found -->
+                <div class="patterns-found-card">
+                    <h3><i class="fas fa-search-plus"></i> Domain Patterns Found:</h3>
+                    <div class="patterns-found-content">
+                        <div class="pattern-row">
+                            <span class="pattern-label">Average Length:</span>
+                            <span id="averageLength" class="pattern-value">14 characters</span>
+                        </div>
+                        <div class="pattern-row">
+                            <span class="pattern-label">Length Range:</span>
+                            <span id="lengthRange" class="pattern-value">7 - 20 characters</span>
+                        </div>
+                        <div class="pattern-row">
+                            <span class="pattern-label">Most Common Word Count:</span>
+                            <span id="wordCount" class="pattern-value">2 words</span>
+                        </div>
+                        <div class="pattern-row">
+                            <span class="pattern-label">Industry Terms:</span>
+                            <span id="industryTermsList" class="pattern-value">barbecue, bbq, grill, smoker, party, fire pit, porch, spring, supply</span>
+                        </div>
+                        <div class="pattern-row">
+                            <span class="pattern-label">Niche Keywords:</span>
+                            <span id="nicheKeywordsList" class="pattern-value">bbq, fire, porch, barbecue</span>
+                        </div>
+                        <div class="pattern-row">
+                            <span class="pattern-label">Structure Patterns:</span>
+                            <span id="structurePatterns" class="pattern-value">single word, two-word combination</span>
+                        </div>
+                        <div class="pattern-row">
+                            <span class="pattern-label">Brand Types:</span>
+                            <span id="brandTypes" class="pattern-value">industry specific, compound</span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Dynamic Recommendations -->
+                <div class="recommendations-card">
+                    <h3><i class="fas fa-lightbulb"></i> Domain Recommendations for <span id="nicheTitle">This Niche</span></h3>
+                    <div class="recommendations-content" id="recommendationsContent">
+                        <!-- Dynamic recommendations will be populated here -->
+                        <div class="rec-item">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <span>Loading personalized recommendations...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Best Domain -->
+                <div class="best-domain-card">
+                    <h3><i class="fas fa-star"></i> Our Top Recommendation</h3>
+                    <div id="bestDomain" class="domain-recommendation"></div>
+                </div>
+
+                <!-- Alternative Domains -->
+                <div class="alternatives-card">
+                    <h3><i class="fas fa-list"></i> Alternative Options</h3>
+                    <div id="alternativesList" class="alternatives-list"></div>
+                    <button id="generateMoreBtn" class="btn-secondary">
+                        <i class="fas fa-plus"></i>
+                        Generate 5 More Options
+                    </button>
+                </div>
+            </div>
+
+            <div id="errorSection" class="error-section hidden">
+                <div class="error-card">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>Oops! Something went wrong</h3>
+                    <p id="errorMessage">Please try again with a different niche.</p>
+                    <button id="retryBtn" class="btn-primary">Try Again</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
