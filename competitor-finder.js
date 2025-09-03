@@ -152,6 +152,20 @@ class CompetitorFinder {
                 { name: 'Arc\'teryx', url: 'https://arcteryx.com', domain: 'arcteryx.com' },
                 { name: 'Black Diamond', url: 'https://blackdiamondequipment.com', domain: 'blackdiamondequipment.com' },
                 { name: 'Osprey Packs', url: 'https://osprey.com', domain: 'osprey.com' }
+            ],
+            'man cave': [
+                { name: 'Man Cave Boutique', url: 'https://mancaveboutique.com', domain: 'mancaveboutique.com' },
+                { name: 'Holland Bar Stool', url: 'https://hollandbarstool.com', domain: 'hollandbarstool.com' },
+                { name: 'RAM Game Room', url: 'https://ramgameroom.com', domain: 'ramgameroom.com' },
+                { name: 'Brunswick Billiards', url: 'https://brunswickbilliards.com', domain: 'brunswickbilliards.com' },
+                { name: 'Pool Tables Plus', url: 'https://pooltablesplus.com', domain: 'pooltablesplus.com' }
+            ],
+            'mancave': [
+                { name: 'Man Cave Boutique', url: 'https://mancaveboutique.com', domain: 'mancaveboutique.com' },
+                { name: 'Holland Bar Stool', url: 'https://hollandbarstool.com', domain: 'hollandbarstool.com' },
+                { name: 'RAM Game Room', url: 'https://ramgameroom.com', domain: 'ramgameroom.com' },
+                { name: 'Brunswick Billiards', url: 'https://brunswickbilliards.com', domain: 'brunswickbilliards.com' },
+                { name: 'Pool Tables Plus', url: 'https://pooltablesplus.com', domain: 'pooltablesplus.com' }
             ]
         };
     }
@@ -210,7 +224,9 @@ class CompetitorFinder {
             'smart home': ['home automation', 'iot', 'connected home'],
             'outdoor': ['adventure', 'camping', 'hiking'],
             'garage': ['automotive', 'workshop', 'storage'],
-            'barbecue': ['grilling', 'bbq', 'outdoor cooking']
+            'barbecue': ['grilling', 'bbq', 'outdoor cooking'],
+            'man cave': ['mancave', 'den', 'entertainment', 'game room', 'home theater', 'basement'],
+            'mancave': ['man cave', 'den', 'entertainment', 'game room', 'home theater', 'basement']
         };
 
         if (relatedTerms[niche]) {
