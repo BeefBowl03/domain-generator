@@ -33,37 +33,52 @@ const namecomAPI = process.env.NAMECOM_USERNAME && process.env.NAMECOM_TOKEN
 // Initialize Competitor Finder with OpenAI API key for real-time generation
 const competitorFinder = new CompetitorFinder(process.env.OPENAI_API_KEY);
 
-// Initialize SQLite database
-const db = new sqlite3.Database('domains.db');
+// Initialize database (SQLite for local, in-memory for Vercel)
+let db = null;
+let isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
 
-// Create tables if they don't exist
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS niches (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+if (!isServerless) {
+  // Use SQLite for local development
+  try {
+    db = new sqlite3.Database('domains.db');
+    
+    // Create tables if they don't exist
+    db.serialize(() => {
+      db.run(`CREATE TABLE IF NOT EXISTS niches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS competitor_stores (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    niche_id INTEGER,
-    name TEXT,
-    url TEXT,
-    domain TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (niche_id) REFERENCES niches (id)
-  )`);
+      db.run(`CREATE TABLE IF NOT EXISTS competitor_stores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        niche_id INTEGER,
+        name TEXT,
+        url TEXT,
+        domain TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (niche_id) REFERENCES niches (id)
+      )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS generated_domains (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    niche_id INTEGER,
-    domain TEXT,
-    is_available BOOLEAN,
-    price DECIMAL(10,2),
-    generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (niche_id) REFERENCES niches (id)
-  )`);
-});
+      db.run(`CREATE TABLE IF NOT EXISTS generated_domains (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        niche_id INTEGER,
+        domain TEXT,
+        is_available BOOLEAN,
+        price DECIMAL(10,2),
+        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (niche_id) REFERENCES niches (id)
+      )`);
+    });
+    
+    console.log('✅ SQLite database initialized for local development');
+  } catch (error) {
+    console.log('⚠️  SQLite not available, using in-memory storage');
+    db = null;
+  }
+} else {
+  console.log('🚀 Running in serverless environment, using in-memory storage');
+}
 
 // Helper function to search for high-ticket dropshipping stores
 async function findCompetitorStores(niche) {
@@ -726,27 +741,35 @@ app.post('/api/niche', async (req, res) => {
   const { niche } = req.body;
   
   try {
-    // Check if niche exists
-    db.get('SELECT * FROM niches WHERE name = ?', [niche], async (err, row) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
+    if (db) {
+      // Use SQLite for local development
+      db.get('SELECT * FROM niches WHERE name = ?', [niche], async (err, row) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
 
-      let nicheId;
-      if (row) {
-        nicheId = row.id;
-      } else {
-        // Create new niche
-        db.run('INSERT INTO niches (name) VALUES (?)', [niche], function(err) {
-          if (err) {
-            return res.status(500).json({ error: err.message });
-          }
-          nicheId = this.lastID;
-        });
-      }
+        let nicheId;
+        if (row) {
+          nicheId = row.id;
+        } else {
+          // Create new niche
+          db.run('INSERT INTO niches (name) VALUES (?)', [niche], function(err) {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+            nicheId = this.lastID;
+            res.json({ nicheId, niche });
+          });
+          return;
+        }
 
+        res.json({ nicheId, niche });
+      });
+    } else {
+      // Serverless environment - just return a generated ID
+      const nicheId = Math.floor(Math.random() * 1000000);
       res.json({ nicheId, niche });
-    });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
