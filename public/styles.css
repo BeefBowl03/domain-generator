@@ -451,6 +451,12 @@ body {
     margin-bottom: 2rem;
 }
 
+/* Center the retry button under the error message */
+.error-card #retryBtn {
+    display: inline-flex;
+    margin: 0 auto; /* center horizontally */
+}
+
 /* Utility Classes */
 .hidden {
     display: none !important;

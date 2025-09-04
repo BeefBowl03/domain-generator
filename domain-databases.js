@@ -16,6 +16,41 @@ const DOMAIN_DATABASES = {
         'Studio', 'Labs', 'Workshop', 'Factory', 'House', 'Store'
     ],
 
+    // Popular niches with canonical categories and synonyms
+    // Used to: (1) Prefer preloaded competitors first; (2) Enforce exactly 5 when in DB; (3) Provide suggestions on errors
+    popularNiches: {
+        'backyard': {
+            synonyms: ['outdoor', 'patio', 'garden', 'yard', 'lawn', 'landscape', 'deck']
+        },
+        'pizza oven': {
+            synonyms: ['outdoor oven', 'wood fired oven', 'backyard cooking']
+        },
+        'marine': {
+            synonyms: ['boat', 'nautical', 'sailing', 'yacht', 'ocean', 'sea']
+        },
+        'fitness': {
+            synonyms: ['gym', 'training', 'workout', 'strength']
+        },
+        'drone': {
+            synonyms: ['uav', 'quadcopter', 'aerial', 'fpv']
+        },
+        'kitchen': {
+            synonyms: ['culinary', 'cookware', 'appliances']
+        },
+        'golf': {
+            synonyms: ['golfing', 'golf gear', 'golf clubs']
+        },
+        'wellness': {
+            synonyms: ['health', 'spa', 'recovery']
+        },
+        'garage': {
+            synonyms: ['workshop', 'automotive', 'storage']
+        },
+        'smart home': {
+            synonyms: ['home automation', 'iot', 'connected home']
+        }
+    },
+
     // High-Ticket Niche Terms (products $1000+)
     nicheTerms: {
         'backyard': [

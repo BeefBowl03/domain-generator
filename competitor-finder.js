@@ -43,10 +43,10 @@ class CompetitorFinder {
                 { name: 'Premium Golf Supply', url: 'https://premiumgolfsupply.com', domain: 'premiumgolfsupply.com' }
             ],
             'firepit': [
-                { name: 'Fire Pit Plaza', url: 'https://firepitplaza.com', domain: 'firepitplaza.com' },
-                { name: 'Outdoor Fire Store', url: 'https://outdoorfirestore.com', domain: 'outdoorfirestore.com' },
-                { name: 'Fire Pit Outpost', url: 'https://firepitoutpost.com', domain: 'firepitoutpost.com' },
-                { name: 'Backyard Fire Place', url: 'https://backyardfireplace.com', domain: 'backyardfireplace.com' },
+                { name: 'Fire Pit Surplus', url: 'https://firepitsurplus.com', domain: 'firepitsurplus.com' },
+                { name: 'Starfire Direct', url: 'https://starfiredirect.com', domain: 'starfiredirect.com' },
+                { name: 'Woodland Direct', url: 'https://woodlanddirect.com', domain: 'woodlanddirect.com' },
+                { name: 'BBQGuys', url: 'https://bbqguys.com', domain: 'bbqguys.com' },
                 { name: 'Flame Authority', url: 'https://flameauthority.com', domain: 'flameauthority.com' }
             ],
             'barbecue': [
@@ -106,11 +106,11 @@ class CompetitorFinder {
                 { name: 'Smart Home Direct', url: 'https://smarthomedirect.com', domain: 'smarthomedirect.com' }
             ],
             'fitness': [
-                { name: 'Iron Paradise', url: 'https://ironparadise.com', domain: 'ironparadise.com' },
-                { name: 'Beast Mode Fitness', url: 'https://beastmodefitness.com', domain: 'beastmodefitness.com' },
-                { name: 'Elite Gym Supply', url: 'https://elitegymsupply.com', domain: 'elitegymsupply.com' },
-                { name: 'Power Fitness Pro', url: 'https://powerfitnesspro.com', domain: 'powerfitnesspro.com' },
-                { name: 'Strength Dynasty', url: 'https://strengthdynasty.com', domain: 'strengthdynasty.com' }
+                { name: 'Rogue Fitness', url: 'https://www.roguefitness.com', domain: 'roguefitness.com' },
+                { name: 'Titan Fitness', url: 'https://www.titan.fitness', domain: 'titan.fitness' },
+                { name: 'Rep Fitness', url: 'https://www.repfitness.com', domain: 'repfitness.com' },
+                { name: 'Force USA', url: 'https://www.forceusa.com', domain: 'forceusa.com' },
+                { name: 'Again Faster', url: 'https://www.againfaster.com', domain: 'againfaster.com' }
             ],
             'automotive': [
                 { name: 'Auto Parts Warehouse', url: 'https://autopartswarehouse.com', domain: 'autopartswarehouse.com' },
@@ -254,6 +254,50 @@ class CompetitorFinder {
         }
 
         return Array.from(variations);
+    }
+
+    // Build a set of niche-related keywords (original + variations)
+    buildNicheKeywordSet(niche) {
+        const normalized = this.normalizeNiche(niche);
+        const vars = this.getNicheVariations(normalized);
+        const words = new Set();
+        const addWord = (w) => {
+            const t = String(w || '').toLowerCase().trim();
+            if (t && t.length >= 3) words.add(t);
+        };
+        addWord(normalized);
+        for (const v of vars) addWord(v);
+        // Split multi-word variations into tokens
+        for (const v of Array.from(words)) {
+            v.split(/\s+/).forEach(addWord);
+        }
+        return words;
+    }
+
+    // Heuristic: is a store relevant to the given niche?
+    async isRelevantToNiche(store, niche, options = {}) {
+        const keywords = this.buildNicheKeywordSet(niche);
+        const lower = (v) => String(v || '').toLowerCase();
+        const fields = [lower(store && store.name), lower(store && store.domain), lower(store && store.url)];
+        const anyHit = (str) => {
+            for (const k of keywords) {
+                if (str.includes(k)) return true;
+            }
+            return false;
+        };
+        // Shallow metadata check only (fast, no network)
+        if (fields.some(Boolean) && fields.some(anyHit)) return true;
+        // Optional: allow content fetch only if explicitly requested and shallow failed
+        if (options.checkContent) {
+            try {
+                const { html } = await this.fetchHtmlVariants(store, { fastVerify: true });
+                if (html && typeof html === 'string') {
+                    const text = lower(html);
+                    return anyHit(text);
+                }
+            } catch (_) {}
+        }
+        return false;
     }
 
     async searchOnlineCompetitors(niche) {
@@ -415,8 +459,8 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         tryUrls.push(`http://www.${cleanDomain}`);
 
         const fastVerify = !!options.fastVerify;
-        const headTimeout = fastVerify ? 1800 : 6500;
-        const getTimeout = fastVerify ? 4000 : 12000;
+        const headTimeout = fastVerify ? 1200 : 5000;
+        const getTimeout = fastVerify ? 2500 : 9000;
         const maxRedirects = fastVerify ? 1 : 2;
 
         for (const url of tryUrls) {
@@ -611,6 +655,9 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
                         if (!exists) return;
                         const qualifies = await this.qualifiesAsHighTicketDropshipping(competitor);
                         if (qualifies) {
+                            // Enforce niche relevance (shallow only for speed)
+                            const relevant = await this.isRelevantToNiche(competitor, normalized, { checkContent: false });
+                            if (!relevant) return;
                             verified.push(competitor);
                             seenDomains.add(domainKey);
                         }
@@ -678,6 +725,9 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
                         if (!exists) return;
                         const qualifies = await this.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
                         if (qualifies) {
+                            // Enforce niche relevance when using global fallback (shallow only)
+                            const relevant = await this.isRelevantToNiche(c, normalized, { checkContent: false });
+                            if (!relevant) return;
                             verified.push(c);
                             seenDomains.add(domainKey);
                         }
