@@ -308,7 +308,7 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
 
         try {
             const response = await this.openai.chat.completions.create({
-                model: "gpt-4",
+                model: "gpt-4o-mini",
                 messages: [{ role: "user", content: prompt }],
                 temperature: 0.3
             });
@@ -402,13 +402,13 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
-    // Method to verify if a competitor store actually exists (robust)
+    // Method to verify if a competitor store actually exists (thorough)
     async verifyStoreExists(store) {
         const tryUrls = [];
         const cleanDomain = (store.domain || '').replace(/^https?:\/\//, '').replace(/^www\./, '');
         const baseUrl = (store.url || '').startsWith('http') ? store.url : `https://${cleanDomain}`;
 
-        // Try different variants
+        // Try different variants (more thorough)
         tryUrls.push(baseUrl);
         tryUrls.push(baseUrl.replace('https://', 'http://'));
         tryUrls.push(`https://www.${cleanDomain}`);
@@ -416,11 +416,11 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
 
         for (const url of tryUrls) {
             try {
-                // Prefer HEAD but fallback to GET on failure
-                const head = await axios.head(url, { timeout: 6000, validateStatus: () => true });
+                // Prefer HEAD but fallback to GET on failure (longer timeouts for reliability)
+                const head = await axios.head(url, { timeout: 6500, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainVerifier/1.0)' } });
                 if (head && head.status >= 200 && head.status < 400) return true;
 
-                const get = await axios.get(url, { timeout: 8000, maxRedirects: 2, validateStatus: () => true });
+                const get = await axios.get(url, { timeout: 12000, maxRedirects: 2, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainVerifier/1.0)' } });
                 if (get && get.status >= 200 && get.status < 400) return true;
             } catch (e) {
                 // Continue trying other variants
@@ -430,7 +430,7 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         return false;
     }
 
-    // Fetch HTML for URL variants (first successful)
+    // Fetch HTML for URL variants (first successful, thorough)
     async fetchHtmlVariants(store) {
         const cleanDomain = (store.domain || '').replace(/^https?:\/\//, '').replace(/^www\./, '');
         const baseUrl = (store.url || '').startsWith('http') ? store.url : `https://${cleanDomain}`;
@@ -442,7 +442,7 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         ];
         for (const url of tryUrls) {
             try {
-                const res = await axios.get(url, { timeout: 8000, maxRedirects: 2, validateStatus: () => true });
+                const res = await axios.get(url, { timeout: 12000, maxRedirects: 2, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainVerifier/1.0)' } });
                 if (res && res.status >= 200 && res.status < 400 && typeof res.data === 'string') {
                     return { html: res.data, finalUrl: url };
                 }
@@ -456,9 +456,12 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         if (!html) return false;
         const text = html.toLowerCase();
         const positives = [
-            'authorized dealer', 'brands we carry', 'ships directly from', 'ships from supplier',
-            'drop ship', 'dropship', 'lead time', 'built to order', 'made to order', 'factory direct',
-            'brand warranty', 'multiple brands', 'wholesale'
+            'authorized dealer', 'authorized reseller', 'official dealer', 'official reseller',
+            'brands we carry', 'brands we stock', 'our brands', 'brand partners', 'dealer program',
+            'ships directly from', 'ships from supplier', 'ships from manufacturer', 'direct from supplier',
+            'drop ship', 'dropship', 'drop-ship', 'drop shipping', 'dropshipping',
+            'lead time', 'built to order', 'made to order', 'factory direct', 'special order',
+            'brand warranty', 'manufacturer warranty', 'multiple brands', 'wholesale', 'distributor'
         ];
         return positives.some(p => text.includes(p));
     }
@@ -484,37 +487,88 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         const hasInstallments = /affirm|klarna|afterpay|shop pay installments|pay over time/i.test(html);
         const highTicket = maxPrice >= 500 || hasInstallments;
         const dropshipHint = this.contentSuggestsDropshipping(html);
-        return highTicket && (dropshipHint || true); // allow when high-ticket even if dropship hints absent
+        // Require BOTH high-ticket and clear dropshipping indicators
+        return highTicket && dropshipHint;
     }
 
-    // Method to get verified competitors (only those that actually exist)
-    async getVerifiedCompetitors(niche) {
+    // Method to get verified competitors. If options.fast === true, skip verification for speed
+    async getVerifiedCompetitors(niche, options = {}) {
+        const fast = !!options.fast;
         const verified = [];
         const seenDomains = new Set();
         const normalized = this.normalizeNiche(niche);
 
+        if (fast) {
+            // 1) Use known stores for niche or variations without verification
+            const fromKnown = [];
+            if (this.knownStores[normalized]) fromKnown.push(...this.knownStores[normalized]);
+            const variations = this.getNicheVariations(normalized);
+            for (const v of variations) {
+                if (fromKnown.length >= 5) break;
+                if (this.knownStores[v]) {
+                    for (const s of this.knownStores[v]) {
+                        const key = (s.domain || '').replace(/^www\./, '').toLowerCase();
+                        if (!seenDomains.has(key)) {
+                            fromKnown.push(s);
+                            seenDomains.add(key);
+                            if (fromKnown.length >= 5) break;
+                        }
+                    }
+                }
+            }
+            if (fromKnown.length >= 5) return fromKnown.slice(0, 5);
+
+            // 2) Supplement with AI without verification (fast model)
+            const ai = await this.searchOnlineCompetitors(niche);
+            const combined = [...fromKnown];
+            for (const comp of ai) {
+                if (combined.length >= 5) break;
+                const key = (comp.domain || '').replace(/^www\./, '').toLowerCase();
+                if (!seenDomains.has(key)) {
+                    combined.push(comp);
+                    seenDomains.add(key);
+                }
+            }
+            return combined.slice(0, 5);
+        }
+
         const tryAdd = async (list = []) => {
+            const candidates = [];
             for (const competitor of list) {
                 if (!competitor || !competitor.domain) continue;
                 const domainKey = competitor.domain.replace(/^www\./, '').toLowerCase();
                 if (seenDomains.has(domainKey)) continue;
-                const exists = await this.verifyStoreExists(competitor);
-                if (exists && await this.qualifiesAsHighTicketDropshipping(competitor)) {
-                    verified.push(competitor);
-                    seenDomains.add(domainKey);
-                }
+                candidates.push({ competitor, domainKey });
+            }
+
+            // Verify in small parallel batches for speed
+            const batchSize = 5;
+            for (let i = 0; i < candidates.length; i += batchSize) {
+                const batch = candidates.slice(i, i + batchSize);
+                await Promise.all(batch.map(async ({ competitor, domainKey }) => {
+                    if (verified.length >= 5) return;
+                    try {
+                        const exists = await this.verifyStoreExists(competitor);
+                        if (!exists) return;
+                        const qualifies = await this.qualifiesAsHighTicketDropshipping(competitor);
+                        if (qualifies) {
+                            verified.push(competitor);
+                            seenDomains.add(domainKey);
+                        }
+                    } catch (_) {}
+                }));
                 if (verified.length >= 5) return true;
             }
-            return false;
+            return verified.length >= 5;
         };
 
         // 1) Try known/primary results
         const initial = await this.findCompetitors(niche);
-        if (await tryAdd(initial)) return verified;
+        if (await tryAdd(initial)) return verified.slice(0, 5);
 
         // 2) Supplement with AI for the same niche
         const ai = await this.searchOnlineCompetitors(niche);
-        if (await tryAdd(ai)) return verified;
+        if (await tryAdd(ai)) return verified.slice(0, 5);
 
         // 3) Try niche variations with AI
         const variations = this.getNicheVariations(normalized);
@@ -523,7 +577,21 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
             if (await tryAdd(more)) break;
         }
 
-        return verified;
+        // 4) Keep searching with repeated AI calls until we reach 5 or hit max attempts
+        let extraAttempts = 0;
+        const maxStrictAttempts = (options && options.maxAttempts) ? options.maxAttempts : 8;
+        while (verified.length < 5 && extraAttempts < maxStrictAttempts) {
+            extraAttempts++;
+            const more = await this.searchOnlineCompetitors(niche);
+            await tryAdd(more);
+            for (const variation of variations) {
+                if (verified.length >= 5) break;
+                const moreVar = await this.searchOnlineCompetitors(variation);
+                await tryAdd(moreVar);
+            }
+        }
+
+        return verified.slice(0, 5);
     }
 }
 

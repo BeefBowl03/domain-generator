@@ -12,8 +12,7 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Simple cache for generated domains to speed up "Generate More"
-const domainCache = new Map();
+// Caching removed to avoid any cross-request memory
 
 // Middleware
 app.use(cors());
@@ -89,8 +88,7 @@ if (!isServerless) {
   console.log('🚀 Running in serverless environment, using in-memory storage');
 }
 
-// Simple in-memory cache for AI niche analysis
-const aiNicheCache = new Map();
+// (Removed aiNicheCache – no AI memory/caching across requests)
 
 // (Removed persistent AI memory integration)
 
@@ -111,13 +109,9 @@ async function findCompetitorStores(niche) {
 async function analyzeDomainPatterns(competitorDomains, niche) {
   console.log(`🤖 Starting AI analysis for "${niche}" niche...`);
   
-  // Get AI-powered niche analysis
+  // Get AI-powered niche analysis (no caching)
   const nicheLower = (niche || '').toLowerCase().trim();
-  let analysis = aiNicheCache.get(nicheLower);
-  if (!analysis) {
-    analysis = await analyzeNicheWithAI(niche);
-    if (analysis) aiNicheCache.set(nicheLower, analysis);
-  }
+  const analysis = await analyzeNicheWithAI(niche);
   const industryTerms = (analysis && analysis.industryTerms) ? analysis.industryTerms : await extractIndustryTerms(competitorDomains, niche);
   const nicheKeywords = (analysis && analysis.nicheKeywords) ? analysis.nicheKeywords : await extractNicheKeywords(niche);
   
@@ -324,7 +318,7 @@ function generateFallbackRecommendations(niche, industryTerms, nicheKeywords) {
   };
 }
 
-// AI-powered niche analysis using OpenAI
+// AI-powered niche analysis using OpenAI (fast model)
 async function analyzeNicheWithAI(niche) {
   const prompt = `Analyze the "${niche}" niche for high-ticket dropshipping business.
 
@@ -348,7 +342,7 @@ Requirements:
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3
     });
@@ -481,7 +475,7 @@ Return ONLY a JSON array: ["domain1.com", "domain2.com", ...]`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7
     });
@@ -544,7 +538,7 @@ Return ONLY a JSON array: ["domain1.com", "domain2.com", ...]`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.8
     });
@@ -775,7 +769,7 @@ The first domain should be your TOP recommendation.`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3
     });
@@ -854,42 +848,24 @@ app.post('/api/generate-domains', async (req, res) => {
   const { niche } = req.body;
   
   try {
-    // 0. Cache check (SQLite niches_cache) for entire response
-    const nicheKey = (niche || '').toLowerCase().trim();
-    if (db && nicheKey) {
-      const cached = await new Promise(resolve => {
-        db.get('SELECT key, data, hits, updated_at, ttl_seconds FROM niches_cache WHERE key = ?', [nicheKey], (err, row) => {
-          if (err || !row) return resolve(null);
-          const updatedAt = new Date(row.updated_at).getTime();
-          const isFresh = (Date.now() - updatedAt) < ((row.ttl_seconds || 86400) * 1000);
-          if (!isFresh) return resolve(null);
-          try {
-            const payload = JSON.parse(row.data);
-            // increment hits asynchronously
-            db.run('UPDATE niches_cache SET hits = hits + 1 WHERE key = ?', [nicheKey]);
-            return resolve(payload);
-          } catch (_) {
-            return resolve(null);
-          }
-        });
-      });
-      if (cached) {
-        return res.json(cached);
-      }
-    }
+    // No cache lookup; always compute fresh results
     // 1. Find dropshipping competitor stores
     console.log(`Finding dropshipping competitor stores for: ${niche}`);
-    const competitors = await findCompetitorStores(niche);
+    // Strict competitor retrieval: must be live, high-ticket, and dropshipping
+    const competitors = await competitorFinder.getVerifiedCompetitors(niche, { fast: false });
+    if (!competitors || competitors.length < 5) {
+      return res.status(400).json({ 
+        error: `Unable to find at least 5 live, high-ticket dropshipping competitors for "${niche}".`,
+        suggestion: `Try a broader niche term or related variation.`,
+        availableNiches: []
+      });
+    }
     
     if (competitors.length === 0) {
       return res.status(400).json({ 
         error: `Unable to find dropshipping competitors for "${niche}". This could be because the niche is too specific or the AI couldn't find relevant high-ticket dropshipping stores.`,
-        suggestion: `Try a broader niche term or one of our pre-loaded categories for guaranteed dropshipping results.`,
-        availableNiches: [
-          'firepit', 'backyard', 'marine', 'horse riding', 'jewelry', 'watches', 
-          'fitness', 'automotive', 'home decor', 'kitchen', 'baby', 'pet', 
-          'electronics', 'wellness', 'outdoor', 'adventure', 'garage', 'smart home'
-        ]
+        suggestion: `Try a broader niche term.`,
+        availableNiches: []
       });
     }
 
@@ -903,17 +879,18 @@ app.post('/api/generate-domains', async (req, res) => {
 
     // 3. Generate domain suggestions (40 total: 20 professional + 20 poetic) - FAST
     console.log('Generating domain suggestions...');
-    const generatedDomains = await generateDomains(niche, patterns, 60);
+    // Reduce generation count for speed
+    const generatedDomains = await generateDomains(niche, patterns, 40);
     
     // 4. Check availability
     console.log('Checking domain availability...');
     let availableDomains = await checkDomainAvailability(generatedDomains);
     // Ensure we have at least 6 available domains by generating more if needed
     let attempts = 0;
-    while (availableDomains.length < 6 && attempts < 3) {
+    while (availableDomains.length < 6 && attempts < 2) {
       attempts++;
       console.log(`ℹ️ Not enough available domains (${availableDomains.length}). Generating more (attempt ${attempts})...`);
-      const moreGenerated = await generateDomains(niche, patterns, 60);
+      const moreGenerated = await generateDomains(niche, patterns, 40);
       const moreAvailable = await checkDomainAvailability(moreGenerated);
       // Merge unique by domain
       const existing = new Set(availableDomains.map(d => d.domain));
@@ -951,31 +928,14 @@ app.post('/api/generate-domains', async (req, res) => {
       return res.status(400).json({ 
         error: `No suitable domains could be selected for "${niche}". Generated ${generatedDomains.length} domains, ${availableDomains.length} available, but none met quality standards.`,
         suggestion: `Try a different niche or check again later.`,
-        availableNiches: [
-          'firepit', 'backyard', 'marine', 'horse riding', 'jewelry', 'watches', 
-          'fitness', 'automotive', 'home decor', 'kitchen', 'baby', 'pet', 
-          'electronics', 'wellness', 'outdoor', 'adventure', 'garage', 'smart home'
-        ]
+        availableNiches: []
       });
     }
 
     const bestDomain = selectedDomains[0];
     const alternatives = selectedDomains.slice(1);
 
-    // Cache the generated domains for faster "Generate More"
-    const cacheKey = niche.toLowerCase().trim();
-    if (!domainCache.has(cacheKey)) {
-      domainCache.set(cacheKey, {
-        allGenerated: [],
-        usedDomains: new Set(),
-        patterns,
-        competitors
-      });
-    }
-    
-    const cache = domainCache.get(cacheKey);
-    cache.allGenerated.push(...generatedDomains);
-    selectedDomains.forEach(d => cache.usedDomains.add(d.domain));
+    // No cross-request caching
 
     res.json({
       competitors,
@@ -986,22 +946,7 @@ app.post('/api/generate-domains', async (req, res) => {
       totalAvailable: availableDomains.length
     });
 
-    // 6. Save full payload to SQLite cache asynchronously (TTL 24h)
-    if (db && nicheKey) {
-      const payload = {
-        competitors,
-        patterns,
-        recommendation: bestDomain,
-        alternatives,
-        totalGenerated: generatedDomains.length,
-        totalAvailable: availableDomains.length
-      };
-      const json = JSON.stringify(payload);
-      db.run(
-        'INSERT INTO niches_cache (key, data, hits, updated_at, ttl_seconds) VALUES (?, ?, 1, CURRENT_TIMESTAMP, 86400) ON CONFLICT(key) DO UPDATE SET data=excluded.data, updated_at=CURRENT_TIMESTAMP, hits=niches_cache.hits+1, ttl_seconds=excluded.ttl_seconds',
-        [nicheKey, json]
-      );
-    }
+    // No cache persistence
 
   } catch (error) {
     console.error('Error generating domains:', error);
@@ -1020,8 +965,7 @@ app.post('/api/generate-more', async (req, res) => {
       return res.status(400).json({ error: 'Niche is required' });
     }
 
-    const cacheKey = niche.toLowerCase().trim();
-    let cache = domainCache.get(cacheKey);
+    // No cache
     
     console.log(`⚡ Generating exactly 5 more domains for "${niche}"...`);
     
@@ -1038,23 +982,19 @@ app.post('/api/generate-more', async (req, res) => {
       const generateCount = 30 + (attempts * 10);
       let patterns;
       
-      if (cache && cache.patterns) {
-        patterns = cache.patterns;
-      } else {
-        // Create basic patterns if no cache
-        patterns = { 
-          nicheKeywords: [niche], 
-          industryTerms: [],
-          patterns: { averageLength: 12, wordCount: "2 words" }
-        };
-      }
+      // Basic patterns (no cache)
+      patterns = { 
+        nicheKeywords: [niche], 
+        industryTerms: [],
+        patterns: { averageLength: 12, wordCount: "2 words" }
+      };
       
       const newDomains = await generateDomains(niche, patterns, generateCount);
       
       // Filter out already used domains and excluded domains
+      const usedSet = new Set(excludeDomains);
       const unusedDomains = newDomains.filter(domain => 
-        !excludeDomains.includes(domain) && 
-        (!cache || !cache.usedDomains.has(domain)) &&
+        !usedSet.has(domain) &&
         !allAvailableDomains.some(existing => existing.domain === domain)
       );
       
@@ -1094,17 +1034,7 @@ app.post('/api/generate-more', async (req, res) => {
     }
     
     // Update cache with new domains
-    if (cache) {
-      finalDomains.forEach(d => cache.usedDomains.add(d.domain));
-    } else {
-      // Create cache if it doesn't exist
-      domainCache.set(cacheKey, {
-        allGenerated: [],
-        usedDomains: new Set(finalDomains.map(d => d.domain)),
-        patterns: { nicheKeywords: [niche], industryTerms: [] },
-        competitors: []
-      });
-    }
+    // No cache updates
 
     console.log(`🎯 Returning exactly ${finalDomains.length} domains for "${niche}"`);
     
@@ -1115,6 +1045,42 @@ app.post('/api/generate-more', async (req, res) => {
   } catch (error) {
     console.error('Error generating more domains:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Purge all cached/learned niche data
+app.post('/api/purge-memory', async (req, res) => {
+  try {
+    if (!db) {
+      return res.json({ ok: true, message: 'No local database active; nothing to purge.' });
+    }
+
+    const runAsync = (sql) => new Promise(resolve => {
+      db.run(sql, [], (err) => resolve(err));
+    });
+
+    const errors = [];
+    const statements = [
+      'DELETE FROM niches_cache',
+      'DELETE FROM competitor_stores',
+      'DELETE FROM generated_domains',
+      'DELETE FROM niches',
+      'VACUUM'
+    ];
+
+    for (const sql of statements) {
+      const err = await runAsync(sql);
+      if (err) errors.push({ sql, error: err.message });
+    }
+
+    if (errors.length) {
+      return res.status(500).json({ ok: false, errors });
+    }
+
+    return res.json({ ok: true, message: 'All AI-related niche data purged from SQLite.' });
+  } catch (error) {
+    console.error('Error purging memory:', error);
+    return res.status(500).json({ ok: false, error: error.message });
   }
 });
 
