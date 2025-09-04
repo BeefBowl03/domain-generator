@@ -35,9 +35,6 @@ class DomainGenerator {
         this.showLoading();
 
         try {
-            // Step 1: Start finding similar stores
-            this.activateStep(1);
-            
             const response = await fetch('/api/generate-domains', {
                 method: 'POST',
                 headers: {
@@ -56,24 +53,6 @@ class DomainGenerator {
                     this.showError(data.error || 'Failed to generate domains. Please try again.');
                 }
                 return;
-            }
-
-            // Step 2: Competitors found, analyzing patterns
-            if (data.competitors) {
-                this.activateStep(2);
-                await this.delay(300);
-            }
-            
-            // Step 3: Patterns analyzed, generating domains
-            if (data.patterns) {
-                this.activateStep(3);
-                await this.delay(300);
-            }
-            
-            // Step 4: Domains generated and availability checked
-            if (data.recommendation || data.alternatives) {
-                this.activateStep(4);
-                await this.delay(300);
             }
 
             this.displayResults(data);
@@ -137,26 +116,6 @@ class DomainGenerator {
         document.getElementById('resultsSection').classList.add('hidden');
         document.getElementById('errorSection').classList.add('hidden');
         document.getElementById('loadingSection').classList.remove('hidden');
-
-        // Reset all steps to inactive
-        ['step1', 'step2', 'step3', 'step4'].forEach(stepId => {
-            document.getElementById(stepId).classList.remove('active');
-        });
-    }
-
-    // Activate specific loading steps based on real progress
-    activateStep(stepNumber) {
-        const stepId = `step${stepNumber}`;
-        const stepElement = document.getElementById(stepId);
-        if (stepElement) {
-            stepElement.classList.add('active');
-            console.log(`✅ Step ${stepNumber} completed`);
-        }
-    }
-
-    // Helper function for small delays between steps
-    delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     displayResults(data) {
@@ -182,7 +141,10 @@ class DomainGenerator {
         const competitorsList = document.getElementById('competitorsList');
         competitorsList.innerHTML = '';
 
-        competitors.forEach(competitor => {
+        // Ensure we always display exactly 5 competitors (or all if less than 5)
+        const displayCompetitors = competitors.slice(0, 5);
+
+        displayCompetitors.forEach(competitor => {
             const competitorItem = document.createElement('div');
             competitorItem.className = 'competitor-item';
             competitorItem.innerHTML = `
@@ -376,16 +338,6 @@ class DomainGenerator {
             container.appendChild(avoidItem);
         }
 
-        // Pricing Strategy
-        if (recommendations.pricingStrategy) {
-            const pricingItem = document.createElement('div');
-            pricingItem.className = 'rec-item';
-            pricingItem.innerHTML = `
-                <i class="fas fa-dollar-sign"></i>
-                <span><strong>Pricing:</strong> ${recommendations.pricingStrategy}</span>
-            `;
-            container.appendChild(pricingItem);
-        }
 
         // Brand Positioning
         if (recommendations.brandPositioning) {

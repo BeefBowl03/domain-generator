@@ -45,6 +45,7 @@ body {
     font-weight: 400;
     max-width: 600px;
     margin: 0 auto;
+    white-space: nowrap;
 }
 
 /* Main Content */
@@ -235,7 +236,12 @@ body {
 .competitors-list {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1rem;
+    gap: 1.5rem;
+    margin-top: 1rem;
+    max-width: 1200px; /* center grid and keep nice outer gutters on wide screens */
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0 1rem; /* outer gutters so edge cards don't hug the container */
 }
 
 .competitor-item {
@@ -245,6 +251,7 @@ body {
     border-radius: 12px;
     text-align: center;
     transition: all 0.3s ease;
+    min-height: 96px;
 }
 
 .competitor-item:hover {
@@ -285,7 +292,9 @@ body {
 }
 
 .pattern-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 220px 1fr; /* left gold column, right white column */
+    column-gap: 1.5rem; /* space in between */
     align-items: flex-start;
     padding: 0.5rem 0;
     border-bottom: 1px solid rgba(255, 215, 0, 0.1);
@@ -297,14 +306,11 @@ body {
 
 .pattern-label {
     color: #ffd700;
-    font-weight: 600;
-    min-width: 180px;
-    flex-shrink: 0;
+    font-weight: 700;
 }
 
 .pattern-value {
     color: #ffffff;
-    flex: 1;
     line-height: 1.4;
 }
 
@@ -458,6 +464,50 @@ body {
     margin-top: 1rem;
 }
 
+/* Ultra-wide improvements (kept consistent with 3+2 layout) */
+@media (min-width: 1280px) {
+    .competitors-list {
+        gap: 2rem;
+    }
+}
+
+/* Desktop layout: 3 cards on top, 2 centered below when 5 items */
+@media (min-width: 1024px) {
+    /* Recommendations: 3 on top, 2 centered below (match competitors layout) */
+    .recommendations-content {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 1.25rem 1.5rem;
+    }
+    .recommendations-content > .rec-item {
+        grid-column: span 2;
+    }
+    .recommendations-content > .rec-item:nth-child(4) {
+        grid-column: 2 / span 2; /* center left */
+    }
+    .recommendations-content > .rec-item:nth-child(5) {
+        grid-column: 4 / span 2; /* center right */
+    }
+    .competitors-list {
+        display: grid !important; /* override any list layouts */
+        grid-template-columns: repeat(6, 1fr) !important; /* 3 cards on top (each spans 2), 2 centered below */
+        justify-content: center; /* center the grid within its max-width */
+        gap: 1.5rem 2rem;
+    }
+    /* Each card spans two columns */
+    .competitors-list > .competitor-item { 
+        grid-column: span 2; 
+    }
+    /* Explicit positions for row 2 to center perfectly */
+    .competitors-list > .competitor-item:nth-child(4) {
+        grid-column: 2 / span 2; /* columns 2-3 */
+    }
+    .competitors-list > .competitor-item:nth-child(5) {
+        grid-column: 4 / span 2; /* columns 4-5 */
+    }
+}
+
+
 .niche-tag {
     background: rgba(255, 215, 0, 0.1);
     color: #ffd700;
@@ -541,6 +591,7 @@ body {
     .header-content p {
         font-size: 1.1rem;
         padding: 0 1rem;
+        white-space: normal;
     }
     
     .search-card, .loading-card, .error-card {
@@ -644,6 +695,7 @@ body {
     .header-content p {
         font-size: 1rem;
         padding: 0 0.5rem;
+        white-space: normal;
     }
     
     .search-card, .loading-card, .error-card {

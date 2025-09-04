@@ -69,6 +69,15 @@ if (!isServerless) {
         generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (niche_id) REFERENCES niches (id)
       )`);
+
+      // Cache of full API responses per niche (TTL 24h)
+      db.run(`CREATE TABLE IF NOT EXISTS niches_cache (
+        key TEXT PRIMARY KEY,
+        data TEXT,
+        hits INTEGER DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        ttl_seconds INTEGER DEFAULT 86400
+      )`);
     });
     
     console.log('✅ SQLite database initialized for local development');
@@ -80,14 +89,20 @@ if (!isServerless) {
   console.log('🚀 Running in serverless environment, using in-memory storage');
 }
 
+// Simple in-memory cache for AI niche analysis
+const aiNicheCache = new Map();
+
+// (Removed persistent AI memory integration)
+
 // Helper function to search for high-ticket dropshipping stores
 async function findCompetitorStores(niche) {
   try {
-    console.log(`Finding competitors for niche: ${niche}`);
-    const competitors = await competitorFinder.findCompetitors(niche);
+    console.log(`Finding dropshipping competitors for niche: ${niche}`);
+    // Use verified competitors only (live websites)
+    const competitors = await competitorFinder.getVerifiedCompetitors(niche);
     return competitors.slice(0, 5);
   } catch (error) {
-    console.error('Error finding competitor stores:', error);
+    console.error('Error finding dropshipping competitor stores:', error);
     return [];
   }
 }
@@ -97,8 +112,14 @@ async function analyzeDomainPatterns(competitorDomains, niche) {
   console.log(`🤖 Starting AI analysis for "${niche}" niche...`);
   
   // Get AI-powered niche analysis
-  const industryTerms = await extractIndustryTerms(competitorDomains, niche);
-  const nicheKeywords = await extractNicheKeywords(niche);
+  const nicheLower = (niche || '').toLowerCase().trim();
+  let analysis = aiNicheCache.get(nicheLower);
+  if (!analysis) {
+    analysis = await analyzeNicheWithAI(niche);
+    if (analysis) aiNicheCache.set(nicheLower, analysis);
+  }
+  const industryTerms = (analysis && analysis.industryTerms) ? analysis.industryTerms : await extractIndustryTerms(competitorDomains, niche);
+  const nicheKeywords = (analysis && analysis.nicheKeywords) ? analysis.nicheKeywords : await extractNicheKeywords(niche);
   
   const domains = competitorDomains.map(store => store.domain).join(', ');
   
@@ -122,7 +143,7 @@ Focus on domain patterns that work for premium ${niche} businesses.`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3
     });
@@ -199,8 +220,7 @@ Generate 4-6 SPECIFIC recommendations tailored to this niche:
 2. BEST STRUCTURES: What domain patterns work for ${niche} brands?
 3. KEY TERMS TO USE: Which ${niche}-specific words create trust?
 4. TERMS TO AVOID: What ${niche} terms are too narrow or problematic?
-5. PRICING STRATEGY: What price range to target for ${niche} domains?
-6. BRAND POSITIONING: How should ${niche} domains sound to attract $1000+ customers?
+5. BRAND POSITIONING: How should ${niche} domains sound to attract $1000+ customers?
 
 Make recommendations SPECIFIC to ${niche}, not generic advice.
 
@@ -210,13 +230,12 @@ Return ONLY a JSON object:
   "bestStructures": ["structure 1", "structure 2", "structure 3"],
   "keyTerms": ["term1", "term2", "term3"],
   "avoidTerms": ["avoid1", "avoid2", "avoid3"],
-  "pricingStrategy": "pricing advice for this niche",
   "brandPositioning": "how domains should sound for this niche"
 }`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.4
     });
@@ -229,7 +248,38 @@ Return ONLY a JSON object:
     
     if (jsonStart !== -1 && jsonEnd > jsonStart) {
       const jsonStr = content.substring(jsonStart, jsonEnd);
-      return JSON.parse(jsonStr);
+      const aiRecs = JSON.parse(jsonStr);
+
+      // Post-process to enforce niche-specificity
+      const normalizedNiche = String(niche || '').toLowerCase().trim();
+      const dbTerms = DOMAIN_DATABASES.nicheTerms[normalizedNiche] || DOMAIN_DATABASES.nicheTerms[normalizedNiche.replace(/\s+/g, ' ')] || [];
+      const dbVariations = DOMAIN_DATABASES.nicheVariations[normalizedNiche] || [];
+
+      const genericAdjectives = new Set(['luxury','premium','elite','deluxe','upscale','exclusive','high-end','high end','pro','master','masters','best','top']);
+      const normalize = (w) => String(w || '').toLowerCase().trim();
+      const unique = (arr) => Array.from(new Set(arr.map(normalize))).filter(Boolean);
+
+      // Build key terms from DB + AI signals, filter out generic adjectives
+      const builtKeyTerms = unique([
+        ...dbTerms,
+        ...dbVariations,
+        ...industryTerms,
+        ...nicheKeywords,
+        ...(aiRecs.keyTerms || [])
+      ]).filter(t => !genericAdjectives.has(t)).slice(0, 12);
+
+      // Build avoid terms dynamically
+      const globalAvoid = ['cheap','budget','discount','sale','clearance','outlet','deal','bargain','wholesale','lowcost','hyphens','numbers','misspellings'];
+      const nicheAvoid = (DOMAIN_DATABASES.nicheAvoid && DOMAIN_DATABASES.nicheAvoid[normalizedNiche]) ? DOMAIN_DATABASES.nicheAvoid[normalizedNiche] : [];
+      const builtAvoid = unique([...(aiRecs.avoidTerms || []), ...nicheAvoid, ...globalAvoid]).slice(0, 12);
+
+      return {
+        optimalLength: aiRecs.optimalLength || '7-20 characters',
+        bestStructures: aiRecs.bestStructures || [],
+        keyTerms: builtKeyTerms,
+        avoidTerms: builtAvoid,
+        brandPositioning: aiRecs.brandPositioning || `Should sound premium and trustworthy for high-ticket ${niche} customers`
+      };
     }
     
     // Fallback if JSON parsing fails
@@ -243,16 +293,33 @@ Return ONLY a JSON object:
 
 // Fallback recommendations when AI fails
 function generateFallbackRecommendations(niche, industryTerms, nicheKeywords) {
+  const normalizedNiche = String(niche || '').toLowerCase().trim();
+  const dbTerms = DOMAIN_DATABASES.nicheTerms[normalizedNiche] || [];
+  const dbVariations = DOMAIN_DATABASES.nicheVariations[normalizedNiche] || [];
+  const genericAdjectives = new Set(['luxury','premium','elite','deluxe','upscale','exclusive','high-end','high end','pro','master','masters','best','top']);
+  const normalize = (w) => String(w || '').toLowerCase().trim();
+  const unique = (arr) => Array.from(new Set(arr.map(normalize))).filter(Boolean);
+
+  const keyTerms = unique([
+    ...dbTerms,
+    ...dbVariations,
+    ...industryTerms,
+    ...nicheKeywords
+  ]).filter(t => !genericAdjectives.has(t)).slice(0, 12);
+
+  const globalAvoid = ['cheap','budget','discount','sale','clearance','outlet','deal','bargain','wholesale','lowcost','hyphens','numbers','misspellings'];
+  const nicheAvoid = (DOMAIN_DATABASES.nicheAvoid && DOMAIN_DATABASES.nicheAvoid[normalizedNiche]) ? DOMAIN_DATABASES.nicheAvoid[normalizedNiche] : [];
+  const avoidTerms = unique([...nicheAvoid, ...globalAvoid]).slice(0, 12);
+
   return {
-    optimalLength: "4-12 characters (shorter is better)",
+    optimalLength: "7-20 characters",
     bestStructures: [
       `${niche} + premium suffix (${niche}Pro.com)`,
       `Brand + ${niche} term (Lux${niche}.com)`,
       `Creative ${niche} wordplay`
     ],
-    keyTerms: nicheKeywords.slice(0, 4),
-    avoidTerms: ["overly specific products", "generic terms", "hard to spell words"],
-    pricingStrategy: "Target $12-50 for standard domains, up to $100 for premium",
+    keyTerms,
+    avoidTerms,
     brandPositioning: `Should sound premium and trustworthy for high-ticket ${niche} customers`
   };
 }
@@ -375,37 +442,40 @@ async function generateDomains(niche, patterns, count = 40) {
 async function generateProfessionalDomains(niche, nicheTerms, nicheKeywords, industryTerms, count = 20) {
     const prompt = `Generate ${count} SHORT, professional domain names for a high-ticket ${niche} e-commerce store (products $1000+).
 
-🎯 CRITICAL: All domains MUST be clearly related to ${niche}. Use ${niche} terms, concepts, or related words.
+🎯 CRITICAL REQUIREMENTS:
+✅ All domains MUST be clearly related to ${niche}
+✅ Use ONLY complete, real words - NO truncated or made-up words
+✅ Each word in the domain must be a real, recognizable English word
+✅ NO abbreviations like "Greensanct" (should be "GreenSanctuary")
+✅ NO partial words like "Prolansk" (should be "ProLandscape")
+✅ 7-15 characters total (can be slightly longer if needed for real words)
 
 NICHE CONTEXT: ${niche}
 INDUSTRY TERMS: ${industryTerms.join(', ')}
 NICHE KEYWORDS: ${nicheKeywords.join(', ')}
 
-REQUIREMENTS:
-✅ 7-12 characters MAXIMUM (shorter is better)
-✅ MUST relate to ${niche} industry/concepts
-✅ Professional, trustworthy, premium feel
-✅ Include ${niche}-related terms or concepts
-✅ Target affluent ${niche} customers ($1000+ purchases)
-✅ .com extension only
-
 DOMAIN CREATION STRATEGY:
-1. Use ${niche} industry terms: ${industryTerms.slice(0, 3).join(', ')}
-2. Combine with premium prefixes: Pro, Elite, Prime, Lux, Smart, etc.
-3. Add professional suffixes: Pro, Hub, Zone, Direct, etc.
-4. Create ${niche}-specific brand names
+1. Use complete ${niche} industry terms: ${industryTerms.slice(0, 3).join(', ')}
+2. Combine with complete prefixes: Pro, Elite, Prime, Lux, Smart, etc.
+3. Add complete suffixes: Pro, Hub, Zone, Direct, Store, etc.
+4. Create ${niche}-specific brand names using full words only
 
-NICHE-SPECIFIC EXAMPLES FOR ${niche}:
-${niche === 'smart home' ? '- SmartHub.com, TechHome.com, HomeIQ.com, IoTPro.com, AutoHome.com' : ''}
-${niche === 'marine' ? '- MarinePro.com, YachtHub.com, SeaElite.com, NavalPro.com, OceanHub.com' : ''}
-${niche === 'backyard' ? '- YardPro.com, BackyardHub.com, GreenElite.com, PatioZone.com, YardZone.com' : ''}
-${niche === 'wellness' ? '- WellPro.com, HealthHub.com, ZenElite.com, VitalZone.com, WellZone.com' : ''}
-${niche === 'fitness' ? '- FitPro.com, GymElite.com, PowerHub.com, StrengthZone.com, FitZone.com' : ''}
-${niche === 'garage' ? '- GaragePro.com, ToolHub.com, WorkZone.com, ShopElite.com, CraftHub.com' : ''}
-${niche === 'aquarium' ? '- AquaPro.com, TankHub.com, FishElite.com, AquaZone.com, MarineHub.com' : ''}
-- Generic: Use ${niche} + Pro/Elite/Hub/Zone combinations
+VALID EXAMPLES FOR ${niche}:
+${niche === 'backyard' ? '- YardPro.com, PatioHub.com, GreenZone.com, LawnElite.com, DeckDirect.com' : ''}
+${niche === 'marine' ? '- BoatPro.com, YachtHub.com, SeaElite.com, MarineZone.com, OceanDirect.com' : ''}
+${niche === 'fitness' ? '- GymPro.com, FitHub.com, PowerZone.com, StrengthElite.com, SportDirect.com' : ''}
+- Generic: Use complete ${niche} words + complete suffixes
 
-IMPORTANT: Every domain must be recognizable as ${niche}-related!
+INVALID EXAMPLES (DO NOT GENERATE):
+❌ Greensanct.com (should be GreenSanctuary.com)
+❌ Prolansk.com (should be ProLandscape.com)  
+❌ Luxlansk.com (should be LuxLandscape.com)
+❌ Any domain with partial/truncated words
+
+VALIDATION: Each domain must pass this test:
+- Can I pronounce every part of this domain?
+- Does each word component exist in English?
+- Would a customer understand what each word means?
 
 Return ONLY a JSON array: ["domain1.com", "domain2.com", ...]`;
 
@@ -427,44 +497,48 @@ Return ONLY a JSON array: ["domain1.com", "domain2.com", ...]`;
 async function generatePoeticDomains(niche, nicheTerms, poeticDescriptors, count = 20) {
     const prompt = `Generate ${count} SHORT, creative domain names for a high-ticket ${niche} e-commerce store.
 
-🎯 CRITICAL: All domains MUST be clearly related to ${niche}. Use ${niche} terms, concepts, or creative wordplay.
+🎯 CRITICAL REQUIREMENTS:
+✅ All domains MUST be clearly related to ${niche}
+✅ Use ONLY complete, real words - NO truncated or made-up words
+✅ Each word in the domain must be a real, recognizable English word
+✅ NO abbreviations or partial words
+✅ 6-15 characters total (can be slightly longer if needed for real words)
+✅ Creative, catchy, memorable
+✅ Easy to spell and pronounce
 
 NICHE CONTEXT: ${niche}
 NICHE TERMS: ${nicheTerms.join(', ')}
 CREATIVE DESCRIPTORS: ${poeticDescriptors.join(', ')}
 
-REQUIREMENTS:
-✅ 6-12 characters MAXIMUM (shorter is better)
-✅ MUST relate to ${niche} industry/concepts
-✅ Creative, catchy, memorable
-✅ Can be playful, fun, or intriguing
-✅ Easy to spell and pronounce
-✅ Target affluent ${niche} customers
-✅ .com extension only
+DOMAIN CREATION STRATEGY:
+- Use complete ${niche} words + complete creative suffixes
+- Combine real words that relate to ${niche}
+- Create brandable names using full words only
 
-NICHE-SPECIFIC CREATIVE EXAMPLES FOR ${niche}:
-${niche === 'smart home' ? '- TechNest.com, SmartDen.com, ConnectCo.com, IoTopia.com, AutoMate.com' : ''}
-${niche === 'marine' ? '- SeaCraft.com, WavePro.com, OceanIQ.com, YachtCo.com, MarineX.com' : ''}
-${niche === 'backyard' ? '- YardCo.com, GreenSpace.com, PatioIQ.com, BackyardX.com, YardCraft.com' : ''}
-${niche === 'wellness' ? '- ZenCo.com, WellCraft.com, VitalIQ.com, HealthX.com, WellSpace.com' : ''}
-${niche === 'fitness' ? '- FitCraft.com, PowerCo.com, StrengthX.com, GymIQ.com, FitSpace.com' : ''}
-${niche === 'garage' ? '- ToolCraft.com, WorkCo.com, ShopIQ.com, CraftX.com, MakerSpace.com' : ''}
-${niche === 'aquarium' ? '- AquaCraft.com, TankCo.com, FishIQ.com, AquaX.com, MarineSpace.com' : ''}
-- Generic: Use creative ${niche} + Craft/Co/IQ/X/Space combinations
+VALID CREATIVE EXAMPLES FOR ${niche}:
+${niche === 'backyard' ? '- YardCraft.com, GreenSpace.com, PatioClub.com, LawnCo.com, DeckCraft.com' : ''}
+${niche === 'marine' ? '- BoatCraft.com, SeaCo.com, YachtClub.com, OceanCraft.com, WaveCo.com' : ''}
+${niche === 'fitness' ? '- GymCraft.com, FitCo.com, PowerClub.com, SportCraft.com, StrengthCo.com' : ''}
+- Generic: Use complete ${niche} words + Craft/Co/Club/Space/Zone
 
 CREATE DOMAINS THAT:
-- Use creative wordplay related to ${niche}
+- Use creative wordplay with complete ${niche} words
 - Sound modern and memorable
 - Are brandable like tech startups
-- Convey premium quality in few letters
+- Convey premium quality
 - Could work as luxury ${niche} brand names
 
-AVOID:
-- Generic luxury terms (Luxora, Veluxe, etc.)
-- Long compound words
-- Domains unrelated to ${niche}
+VALIDATION: Each domain must pass this test:
+- Can I pronounce every part of this domain?
+- Does each word component exist in English?
+- Would a customer understand what each word means?
+- Is it clearly related to ${niche}?
 
-IMPORTANT: Every domain must be recognizable as ${niche}-related!
+AVOID:
+- Truncated words or abbreviations
+- Generic luxury terms unrelated to ${niche}
+- Long compound words
+- Made-up words
 
 Return ONLY a JSON array: ["domain1.com", "domain2.com", ...]`;
 
@@ -780,14 +854,37 @@ app.post('/api/generate-domains', async (req, res) => {
   const { niche } = req.body;
   
   try {
-    // 1. Find competitor stores
-    console.log(`Finding competitor stores for: ${niche}`);
+    // 0. Cache check (SQLite niches_cache) for entire response
+    const nicheKey = (niche || '').toLowerCase().trim();
+    if (db && nicheKey) {
+      const cached = await new Promise(resolve => {
+        db.get('SELECT key, data, hits, updated_at, ttl_seconds FROM niches_cache WHERE key = ?', [nicheKey], (err, row) => {
+          if (err || !row) return resolve(null);
+          const updatedAt = new Date(row.updated_at).getTime();
+          const isFresh = (Date.now() - updatedAt) < ((row.ttl_seconds || 86400) * 1000);
+          if (!isFresh) return resolve(null);
+          try {
+            const payload = JSON.parse(row.data);
+            // increment hits asynchronously
+            db.run('UPDATE niches_cache SET hits = hits + 1 WHERE key = ?', [nicheKey]);
+            return resolve(payload);
+          } catch (_) {
+            return resolve(null);
+          }
+        });
+      });
+      if (cached) {
+        return res.json(cached);
+      }
+    }
+    // 1. Find dropshipping competitor stores
+    console.log(`Finding dropshipping competitor stores for: ${niche}`);
     const competitors = await findCompetitorStores(niche);
     
     if (competitors.length === 0) {
       return res.status(400).json({ 
-        error: `Unable to find competitors for "${niche}". This could be because the niche is too specific or the AI couldn't find relevant high-ticket companies.`,
-        suggestion: `Try a broader niche term or one of our pre-loaded categories for guaranteed results.`,
+        error: `Unable to find dropshipping competitors for "${niche}". This could be because the niche is too specific or the AI couldn't find relevant high-ticket dropshipping stores.`,
+        suggestion: `Try a broader niche term or one of our pre-loaded categories for guaranteed dropshipping results.`,
         availableNiches: [
           'firepit', 'backyard', 'marine', 'horse riding', 'jewelry', 'watches', 
           'fitness', 'automotive', 'home decor', 'kitchen', 'baby', 'pet', 
@@ -806,11 +903,24 @@ app.post('/api/generate-domains', async (req, res) => {
 
     // 3. Generate domain suggestions (40 total: 20 professional + 20 poetic) - FAST
     console.log('Generating domain suggestions...');
-    const generatedDomains = await generateDomains(niche, patterns, 40);
+    const generatedDomains = await generateDomains(niche, patterns, 60);
     
     // 4. Check availability
     console.log('Checking domain availability...');
-    const availableDomains = await checkDomainAvailability(generatedDomains);
+    let availableDomains = await checkDomainAvailability(generatedDomains);
+    // Ensure we have at least 6 available domains by generating more if needed
+    let attempts = 0;
+    while (availableDomains.length < 6 && attempts < 3) {
+      attempts++;
+      console.log(`ℹ️ Not enough available domains (${availableDomains.length}). Generating more (attempt ${attempts})...`);
+      const moreGenerated = await generateDomains(niche, patterns, 60);
+      const moreAvailable = await checkDomainAvailability(moreGenerated);
+      // Merge unique by domain
+      const existing = new Set(availableDomains.map(d => d.domain));
+      for (const d of moreAvailable) {
+        if (!existing.has(d.domain)) availableDomains.push(d);
+      }
+    }
     
     console.log(`Found ${availableDomains.length} available domains from ${generatedDomains.length} generated`);
     
@@ -827,6 +937,15 @@ app.post('/api/generate-domains', async (req, res) => {
     // 5. Use ChatGPT to select the best 6 domains from available ones
     console.log('Using AI to select best 6 domains...');
     const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
+    // Guarantee 1 recommendation + 5 alternatives minimum
+    if (selectedDomains.length < 6) {
+      const deficit = 6 - selectedDomains.length;
+      const chosen = new Set(selectedDomains.map(d => d.domain));
+      for (const d of availableDomains) {
+        if (selectedDomains.length >= 6) break;
+        if (!chosen.has(d.domain)) selectedDomains.push(d);
+      }
+    }
     
     if (selectedDomains.length === 0) {
       return res.status(400).json({ 
@@ -867,11 +986,30 @@ app.post('/api/generate-domains', async (req, res) => {
       totalAvailable: availableDomains.length
     });
 
+    // 6. Save full payload to SQLite cache asynchronously (TTL 24h)
+    if (db && nicheKey) {
+      const payload = {
+        competitors,
+        patterns,
+        recommendation: bestDomain,
+        alternatives,
+        totalGenerated: generatedDomains.length,
+        totalAvailable: availableDomains.length
+      };
+      const json = JSON.stringify(payload);
+      db.run(
+        'INSERT INTO niches_cache (key, data, hits, updated_at, ttl_seconds) VALUES (?, ?, 1, CURRENT_TIMESTAMP, 86400) ON CONFLICT(key) DO UPDATE SET data=excluded.data, updated_at=CURRENT_TIMESTAMP, hits=niches_cache.hits+1, ttl_seconds=excluded.ttl_seconds',
+        [nicheKey, json]
+      );
+    }
+
   } catch (error) {
     console.error('Error generating domains:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
+// (Memory endpoints removed)
 
 // Generate more domains (avoiding duplicates)
 app.post('/api/generate-more', async (req, res) => {
@@ -885,44 +1023,93 @@ app.post('/api/generate-more', async (req, res) => {
     const cacheKey = niche.toLowerCase().trim();
     let cache = domainCache.get(cacheKey);
     
-    if (!cache) {
-      // No cache, use lightweight generation
-      console.log(`⚡ No cache found for "${niche}", generating fresh...`);
-      const patterns = { nicheKeywords: [niche], industryTerms: [] };
-      const generated = await generateDomains(niche, patterns, 20);
-      const available = await checkDomainAvailability(generated);
-      const filtered = available.filter(d => !excludeDomains.includes(d.domain));
+    console.log(`⚡ Generating exactly 5 more domains for "${niche}"...`);
+    
+    let attempts = 0;
+    let allAvailableDomains = [];
+    const maxAttempts = 3;
+    
+    // Keep generating until we have at least 5 unique, available domains
+    while (allAvailableDomains.length < 5 && attempts < maxAttempts) {
+      attempts++;
+      console.log(`🔄 Attempt ${attempts} to generate more domains...`);
       
-      return res.json({
-        domains: filtered.slice(0, 5)
-      });
+      // Generate more domains (increase count with each attempt)
+      const generateCount = 30 + (attempts * 10);
+      let patterns;
+      
+      if (cache && cache.patterns) {
+        patterns = cache.patterns;
+      } else {
+        // Create basic patterns if no cache
+        patterns = { 
+          nicheKeywords: [niche], 
+          industryTerms: [],
+          patterns: { averageLength: 12, wordCount: "2 words" }
+        };
+      }
+      
+      const newDomains = await generateDomains(niche, patterns, generateCount);
+      
+      // Filter out already used domains and excluded domains
+      const unusedDomains = newDomains.filter(domain => 
+        !excludeDomains.includes(domain) && 
+        (!cache || !cache.usedDomains.has(domain)) &&
+        !allAvailableDomains.some(existing => existing.domain === domain)
+      );
+      
+      // Check availability
+      const availableDomains = await checkDomainAvailability(unusedDomains);
+      
+      // Add new available domains to our collection
+      allAvailableDomains.push(...availableDomains);
+      
+      // Remove duplicates based on domain name
+      allAvailableDomains = allAvailableDomains.filter((domain, index, self) =>
+        index === self.findIndex(d => d.domain === domain.domain)
+      );
+      
+      console.log(`✅ Found ${availableDomains.length} new domains, total: ${allAvailableDomains.length}`);
     }
-
-    // Generate only 20 new domains for speed
-    console.log(`⚡ Fast generating 20 more domains for "${niche}"...`);
-    const newDomains = await generateDomains(niche, cache.patterns, 20);
     
-    // Filter out already used domains and excluded domains
-    const unusedDomains = newDomains.filter(domain => 
-      !cache.usedDomains.has(domain) && !excludeDomains.includes(domain)
-    );
-    
-    // Check availability
-    const availableDomains = await checkDomainAvailability(unusedDomains);
-    
-    if (availableDomains.length === 0) {
+    if (allAvailableDomains.length === 0) {
       return res.json({ 
         domains: [],
-        message: `No new available domains found for "${niche}". Try refreshing.`
+        message: `No new available domains found for "${niche}". Try a different niche variation.`
       });
     }
 
+    // Take exactly 5 domains; if fewer available, keep generating until 5 or attempts exhausted
+    let finalDomains = allAvailableDomains.slice(0, 5);
+    let extraAttempts = 0;
+    while (finalDomains.length < 5 && extraAttempts < 2) {
+      extraAttempts++;
+      const more = await generateDomains(niche, patterns, 60);
+      const moreAvail = await checkDomainAvailability(more);
+      const used = new Set([...excludeDomains, ...finalDomains.map(d => d.domain)]);
+      for (const d of moreAvail) {
+        if (finalDomains.length >= 5) break;
+        if (!used.has(d.domain)) finalDomains.push(d);
+      }
+    }
+    
     // Update cache with new domains
-    cache.allGenerated.push(...newDomains);
-    availableDomains.forEach(d => cache.usedDomains.add(d.domain));
+    if (cache) {
+      finalDomains.forEach(d => cache.usedDomains.add(d.domain));
+    } else {
+      // Create cache if it doesn't exist
+      domainCache.set(cacheKey, {
+        allGenerated: [],
+        usedDomains: new Set(finalDomains.map(d => d.domain)),
+        patterns: { nicheKeywords: [niche], industryTerms: [] },
+        competitors: []
+      });
+    }
 
+    console.log(`🎯 Returning exactly ${finalDomains.length} domains for "${niche}"`);
+    
     res.json({
-      domains: availableDomains.slice(0, 5)
+      domains: finalDomains
     });
 
   } catch (error) {
