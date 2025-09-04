@@ -426,7 +426,22 @@ async function generateDomains(niche, patterns, count = 40) {
   
   const poeticDomains = await generatePoeticDomains(niche, nicheTermsFromDB, poeticDescriptors, 20);
   
-  const allDomains = [...professionalDomains, ...poeticDomains];
+  // Filter out domains that use the exact niche term – enforce broader keywords
+  const allRaw = [...professionalDomains, ...poeticDomains];
+  const exact = String(niche || '').toLowerCase().replace(/\s+/g, '');
+  const isBroad = (d) => {
+    const base = String(d || '').toLowerCase().replace(/\.com$/, '');
+    return !base.includes(exact);
+  };
+  let allDomains = allRaw.filter(isBroad);
+  // If filtering removed too many, keep some originals but deprioritize later via scoring
+  if (allDomains.length < Math.min(20, count)) {
+    const missing = Math.min(count, allRaw.length) - allDomains.length;
+    for (const d of allRaw) {
+      if (allDomains.length >= Math.min(count, allRaw.length)) break;
+      if (!allDomains.includes(d)) allDomains.push(d);
+    }
+  }
   console.log(`✅ Generated ${professionalDomains.length} professional + ${poeticDomains.length} poetic = ${allDomains.length} total domains`);
   
   return allDomains;
@@ -454,6 +469,10 @@ DOMAIN CREATION STRATEGY:
 3. Add complete suffixes: Pro, Hub, Zone, Direct, Store, etc.
 4. Create ${niche}-specific brand names using full words only
 
+STRICT CONSTRAINTS:
+- Do NOT include the exact word "${niche}" or the concatenated variant "${niche.replace(/\s+/g,'')}" in the domain.
+- Use broader industry/category words (e.g., outdoor, living, home, supply, gear) rather than the exact product term.
+
 VALID EXAMPLES FOR ${niche}:
 ${niche === 'backyard' ? '- YardPro.com, PatioHub.com, GreenZone.com, LawnElite.com, DeckDirect.com' : ''}
 ${niche === 'marine' ? '- BoatPro.com, YachtHub.com, SeaElite.com, MarineZone.com, OceanDirect.com' : ''}
@@ -465,6 +484,7 @@ INVALID EXAMPLES (DO NOT GENERATE):
 ❌ Prolansk.com (should be ProLandscape.com)  
 ❌ Luxlansk.com (should be LuxLandscape.com)
 ❌ Any domain with partial/truncated words
+❌ Any domain that contains the exact word "${niche}" or "${niche.replace(/\s+/g,'')}"
 
 VALIDATION: Each domain must pass this test:
 - Can I pronounce every part of this domain?
@@ -515,6 +535,10 @@ ${niche === 'marine' ? '- BoatCraft.com, SeaCo.com, YachtClub.com, OceanCraft.co
 ${niche === 'fitness' ? '- GymCraft.com, FitCo.com, PowerClub.com, SportCraft.com, StrengthCo.com' : ''}
 - Generic: Use complete ${niche} words + Craft/Co/Club/Space/Zone
 
+STRICT CONSTRAINTS:
+- Do NOT include the exact word "${niche}" or the concatenated variant "${niche.replace(/\s+/g,'')}" in the domain.
+- Prefer broader category words instead of the exact product term.
+
 CREATE DOMAINS THAT:
 - Use creative wordplay with complete ${niche} words
 - Sound modern and memorable
@@ -533,6 +557,7 @@ AVOID:
 - Generic luxury terms unrelated to ${niche}
 - Long compound words
 - Made-up words
+ - The exact term "${niche}" or "${niche.replace(/\s+/g,'')}"
 
 Return ONLY a JSON array: ["domain1.com", "domain2.com", ...]`;
 
