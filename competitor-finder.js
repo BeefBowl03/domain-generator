@@ -402,8 +402,8 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
-    // Method to verify if a competitor store actually exists (thorough)
-    async verifyStoreExists(store) {
+    // Method to verify if a competitor store actually exists (supports fast/thorough)
+    async verifyStoreExists(store, options = {}) {
         const tryUrls = [];
         const cleanDomain = (store.domain || '').replace(/^https?:\/\//, '').replace(/^www\./, '');
         const baseUrl = (store.url || '').startsWith('http') ? store.url : `https://${cleanDomain}`;
@@ -414,13 +414,18 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         tryUrls.push(`https://www.${cleanDomain}`);
         tryUrls.push(`http://www.${cleanDomain}`);
 
+        const fastVerify = !!options.fastVerify;
+        const headTimeout = fastVerify ? 1800 : 6500;
+        const getTimeout = fastVerify ? 4000 : 12000;
+        const maxRedirects = fastVerify ? 1 : 2;
+
         for (const url of tryUrls) {
             try {
-                // Prefer HEAD but fallback to GET on failure (longer timeouts for reliability)
-                const head = await axios.head(url, { timeout: 6500, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainVerifier/1.0)' } });
+                // Prefer HEAD but fallback to GET on failure (timeouts configurable)
+                const head = await axios.head(url, { timeout: headTimeout, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainVerifier/1.0)' } });
                 if (head && head.status >= 200 && head.status < 400) return true;
 
-                const get = await axios.get(url, { timeout: 12000, maxRedirects: 2, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainVerifier/1.0)' } });
+                const get = await axios.get(url, { timeout: getTimeout, maxRedirects, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainVerifier/1.0)' } });
                 if (get && get.status >= 200 && get.status < 400) return true;
             } catch (e) {
                 // Continue trying other variants
@@ -430,8 +435,8 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         return false;
     }
 
-    // Fetch HTML for URL variants (first successful, thorough)
-    async fetchHtmlVariants(store) {
+    // Fetch HTML for URL variants (first successful, supports fast/thorough)
+    async fetchHtmlVariants(store, options = {}) {
         const cleanDomain = (store.domain || '').replace(/^https?:\/\//, '').replace(/^www\./, '');
         const baseUrl = (store.url || '').startsWith('http') ? store.url : `https://${cleanDomain}`;
         const tryUrls = [
@@ -440,9 +445,12 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
             `https://www.${cleanDomain}`,
             `http://www.${cleanDomain}`
         ];
+        const fastVerify = !!options.fastVerify;
+        const timeout = fastVerify ? 4000 : 12000;
+        const maxRedirects = fastVerify ? 1 : 2;
         for (const url of tryUrls) {
             try {
-                const res = await axios.get(url, { timeout: 12000, maxRedirects: 2, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainVerifier/1.0)' } });
+                const res = await axios.get(url, { timeout, maxRedirects, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainVerifier/1.0)' } });
                 if (res && res.status >= 200 && res.status < 400 && typeof res.data === 'string') {
                     return { html: res.data, finalUrl: url };
                 }
@@ -479,24 +487,73 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         return max;
     }
 
-    // Check both pricing and content to qualify as high-ticket dropshipping
-    async qualifiesAsHighTicketDropshipping(store) {
-        const { html } = await this.fetchHtmlVariants(store);
+    // Check both pricing and content to qualify as high-ticket dropshipping (supports fast/thorough)
+    async qualifiesAsHighTicketDropshipping(store, options = {}) {
+        const { html } = await this.fetchHtmlVariants(store, options);
         if (!html) return false;
         const maxPrice = this.extractMaxPrice(html);
         const hasInstallments = /affirm|klarna|afterpay|shop pay installments|pay over time/i.test(html);
         const highTicket = maxPrice >= 500 || hasInstallments;
         const dropshipHint = this.contentSuggestsDropshipping(html);
-        // Require BOTH high-ticket and clear dropshipping indicators
+        // For trusted known stores, allow high-ticket OR dropship indicators
+        if (options.trustedKnown) {
+            return highTicket || dropshipHint;
+        }
+        // Otherwise require BOTH
         return highTicket && dropshipHint;
     }
 
-    // Method to get verified competitors. If options.fast === true, skip verification for speed
+    // Build a wide candidate list from known stores across niche variations
+    buildWideKnownCandidates(normalizedNiche) {
+        const variations = this.getNicheVariations(normalizedNiche);
+        const added = new Set();
+        const result = [];
+        const addList = (list = []) => {
+            for (const s of list) {
+                if (!s || !s.domain) continue;
+                const key = (s.domain || '').replace(/^www\./, '').toLowerCase();
+                if (added.has(key)) continue;
+                added.add(key);
+                result.push(s);
+            }
+        };
+        if (this.knownStores[normalizedNiche]) addList(this.knownStores[normalizedNiche]);
+        for (const v of variations) {
+            if (this.knownStores[v]) addList(this.knownStores[v]);
+        }
+        return result;
+    }
+
+    // Public: get wide known stores for niche and its variations (unique)
+    getKnownStoresWide(niche) {
+        const normalized = this.normalizeNiche(niche);
+        return this.buildWideKnownCandidates(normalized);
+    }
+
+    // Public: get all known stores across all niches (unique)
+    getKnownStoresGlobal() {
+        const unique = new Map();
+        for (const key of Object.keys(this.knownStores)) {
+            for (const s of (this.knownStores[key] || [])) {
+                if (!s || !s.domain) continue;
+                const k = (s.domain || '').replace(/^www\./, '').toLowerCase();
+                if (!unique.has(k)) unique.set(k, s);
+            }
+        }
+        return Array.from(unique.values());
+    }
+
+    // Method to get verified competitors. Supports options:
+    // - fast: boolean (skip verification)
+    // - deadlineAt: timestamp ms (stop searching when time exceeded, return what we have)
+    // - maxAttempts: number (cap AI attempts)
     async getVerifiedCompetitors(niche, options = {}) {
         const fast = !!options.fast;
         const verified = [];
         const seenDomains = new Set();
         const normalized = this.normalizeNiche(niche);
+        const deadlineAt = typeof options.deadlineAt === 'number' ? options.deadlineAt : null;
+        const isTimedOut = () => (deadlineAt && Date.now() >= deadlineAt);
 
         if (fast) {
             // 1) Use known stores for niche or variations without verification
@@ -541,12 +598,14 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
                 candidates.push({ competitor, domainKey });
             }
 
-            // Verify in small parallel batches for speed
-            const batchSize = 5;
+            // Verify in parallel batches for speed (higher concurrency to meet deadline)
+            const batchSize = 8;
             for (let i = 0; i < candidates.length; i += batchSize) {
+                if (isTimedOut()) return verified.length >= 5; // time limit reached
                 const batch = candidates.slice(i, i + batchSize);
                 await Promise.all(batch.map(async ({ competitor, domainKey }) => {
                     if (verified.length >= 5) return;
+                    if (isTimedOut()) return;
                     try {
                         const exists = await this.verifyStoreExists(competitor);
                         if (!exists) return;
@@ -558,36 +617,72 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
                     } catch (_) {}
                 }));
                 if (verified.length >= 5) return true;
+                if (isTimedOut()) return verified.length >= 1;
             }
             return verified.length >= 5;
         };
 
-        // 1) Try known/primary results
+        // 1) Try wide known candidates first (parallel verification)
+        const wideCandidates = this.buildWideKnownCandidates(normalized);
+        if (await tryAdd(wideCandidates) || isTimedOut()) return verified.slice(0, 5);
+
+        // 1b) Then try primary results from findCompetitors
         const initial = await this.findCompetitors(niche);
-        if (await tryAdd(initial)) return verified.slice(0, 5);
+        if (await tryAdd(initial) || isTimedOut()) return verified.slice(0, 5);
 
         // 2) Supplement with AI for the same niche
+        if (isTimedOut()) return verified.slice(0, 5);
         const ai = await this.searchOnlineCompetitors(niche);
-        if (await tryAdd(ai)) return verified.slice(0, 5);
+        if (await tryAdd(ai) || isTimedOut()) return verified.slice(0, 5);
 
-        // 3) Try niche variations with AI
+        // 3) Try niche variations with AI in parallel waves to beat the deadline
         const variations = this.getNicheVariations(normalized);
-        for (const variation of variations) {
-            const more = await this.searchOnlineCompetitors(variation);
-            if (await tryAdd(more)) break;
+        const waveSize = 4;
+        for (let i = 0; i < variations.length && !isTimedOut() && verified.length < 5; i += waveSize) {
+            const wave = variations.slice(i, i + waveSize);
+            const results = await Promise.all(wave.map(v => this.searchOnlineCompetitors(v)));
+            for (const more of results) {
+                if (await tryAdd(more) || isTimedOut()) break;
+            }
         }
 
         // 4) Keep searching with repeated AI calls until we reach 5 or hit max attempts
         let extraAttempts = 0;
         const maxStrictAttempts = (options && options.maxAttempts) ? options.maxAttempts : 8;
-        while (verified.length < 5 && extraAttempts < maxStrictAttempts) {
+        while (verified.length < 5 && extraAttempts < maxStrictAttempts && !isTimedOut()) {
             extraAttempts++;
-            const more = await this.searchOnlineCompetitors(niche);
-            await tryAdd(more);
-            for (const variation of variations) {
-                if (verified.length >= 5) break;
-                const moreVar = await this.searchOnlineCompetitors(variation);
-                await tryAdd(moreVar);
+            const moreMain = this.searchOnlineCompetitors(niche);
+            const moreVars = Promise.all(variations.slice(0, 6).map(v => this.searchOnlineCompetitors(v)));
+            const [mainRes, varsRes] = await Promise.all([moreMain, moreVars]);
+            await tryAdd(mainRes);
+            for (const list of varsRes) {
+                if (verified.length >= 5 || isTimedOut()) break;
+                await tryAdd(list);
+            }
+        }
+
+        // 5) Last-chance fill before deadline using fast verification on global known stores
+        if (verified.length < 5 && !isTimedOut()) {
+            const candidates = this.getKnownStoresGlobal().filter(s => {
+                const k = (s.domain || '').replace(/^www\./, '').toLowerCase();
+                return !seenDomains.has(k);
+            });
+            const batchSize = 12;
+            for (let i = 0; i < candidates.length && !isTimedOut() && verified.length < 5; i += batchSize) {
+                const batch = candidates.slice(i, i + batchSize);
+                await Promise.all(batch.map(async (c) => {
+                    if (verified.length >= 5 || isTimedOut()) return;
+                    const domainKey = (c.domain || '').replace(/^www\./, '').toLowerCase();
+                    try {
+                        const exists = await this.verifyStoreExists(c, { fastVerify: true });
+                        if (!exists) return;
+                        const qualifies = await this.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
+                        if (qualifies) {
+                            verified.push(c);
+                            seenDomains.add(domainKey);
+                        }
+                    } catch (_) {}
+                }));
             }
         }
 

@@ -127,7 +127,7 @@ class DomainGenerator {
         
         // Display patterns
         this.displayPatterns(data.patterns);
-        
+
         // Display best domain
         this.displayBestDomain(data.recommendation);
         
@@ -178,10 +178,10 @@ class DomainGenerator {
         // Brand types
         document.getElementById('brandTypes').textContent = 'industry specific, compound';
         
-
-        
-        // Display dynamic recommendations
-        this.displayDynamicRecommendations(patterns.recommendations, this.currentNiche || 'this niche');
+        // Brand Positioning moved under Domain Patterns
+        const brandPos = patterns.recommendations?.brandPositioning || `Should sound premium and trustworthy for high-ticket ${this.currentNiche || 'niche'} customers`;
+        const brandPosEl = document.getElementById('brandPositioning');
+        if (brandPosEl) brandPosEl.textContent = brandPos;
     }
 
     displayBestDomain(bestDomain) {
@@ -284,82 +284,7 @@ class DomainGenerator {
         document.getElementById('nicheInput').focus();
     }
 
-    displayDynamicRecommendations(recommendations, niche) {
-        if (!recommendations) return;
-
-        // Update niche title
-        document.getElementById('nicheTitle').textContent = niche.charAt(0).toUpperCase() + niche.slice(1);
-
-        // Clear existing recommendations
-        const container = document.getElementById('recommendationsContent');
-        container.innerHTML = '';
-
-        // Optimal Length
-        if (recommendations.optimalLength) {
-            const lengthItem = document.createElement('div');
-            lengthItem.className = 'rec-item';
-            lengthItem.innerHTML = `
-                <i class="fas fa-ruler-horizontal"></i>
-                <span><strong>Optimal Length:</strong> ${recommendations.optimalLength}</span>
-            `;
-            container.appendChild(lengthItem);
-        }
-
-        // Best Structures
-        if (recommendations.bestStructures && recommendations.bestStructures.length > 0) {
-            const structureItem = document.createElement('div');
-            structureItem.className = 'rec-item';
-            structureItem.innerHTML = `
-                <i class="fas fa-layer-group"></i>
-                <span><strong>Best Structures:</strong> ${recommendations.bestStructures.join(', ')}</span>
-            `;
-            container.appendChild(structureItem);
-        }
-
-        // Key Terms
-        if (recommendations.keyTerms && recommendations.keyTerms.length > 0) {
-            const keyTermsItem = document.createElement('div');
-            keyTermsItem.className = 'rec-item';
-            keyTermsItem.innerHTML = `
-                <i class="fas fa-tags"></i>
-                <span><strong>Key Terms:</strong> ${recommendations.keyTerms.join(', ')}</span>
-            `;
-            container.appendChild(keyTermsItem);
-        }
-
-        // Terms to Avoid
-        if (recommendations.avoidTerms && recommendations.avoidTerms.length > 0) {
-            const avoidItem = document.createElement('div');
-            avoidItem.className = 'rec-item';
-            avoidItem.innerHTML = `
-                <i class="fas fa-exclamation-triangle"></i>
-                <span><strong>Avoid:</strong> ${recommendations.avoidTerms.join(', ')}</span>
-            `;
-            container.appendChild(avoidItem);
-        }
-
-
-        // Brand Positioning
-        if (recommendations.brandPositioning) {
-            const brandItem = document.createElement('div');
-            brandItem.className = 'rec-item';
-            brandItem.innerHTML = `
-                <i class="fas fa-crown"></i>
-                <span><strong>Brand Positioning:</strong> ${recommendations.brandPositioning}</span>
-            `;
-            container.appendChild(brandItem);
-        }
-
-        // If no recommendations, show fallback
-        if (container.children.length === 0) {
-            container.innerHTML = `
-                <div class="rec-item">
-                    <i class="fas fa-lightbulb"></i>
-                    <span>Focus on short, brandable domains that sound premium for ${niche} customers</span>
-                </div>
-            `;
-        }
-    }
+    // Removed recommendations card rendering; Brand Positioning is now shown under patterns
 }
 
 // Initialize the domain generator when the page loads

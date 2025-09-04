@@ -851,11 +851,40 @@ app.post('/api/generate-domains', async (req, res) => {
     // No cache lookup; always compute fresh results
     // 1. Find dropshipping competitor stores
     console.log(`Finding dropshipping competitor stores for: ${niche}`);
-    // Strict competitor retrieval: must be live, high-ticket, and dropshipping
-    const competitors = await competitorFinder.getVerifiedCompetitors(niche, { fast: false });
+    // Strict competitor retrieval with a 3-minute deadline
+    const deadlineAt = Date.now() + 3 * 60 * 1000;
+    let competitors = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
+    // Top up to ensure exactly 5 using wide/global known stores with fast verification
+    if (!competitors) competitors = [];
+    if (competitors.length < 5) {
+      const needed = 5 - competitors.length;
+      const seen = new Set(competitors.map(c => (c.domain || '').replace(/^www\./, '').toLowerCase()));
+      const candidates = [
+        ...competitorFinder.getKnownStoresWide(niche),
+        ...competitorFinder.getKnownStoresGlobal()
+      ].filter(s => {
+        const k = (s.domain || '').replace(/^www\./, '').toLowerCase();
+        return !seen.has(k);
+      });
+      const tried = new Set();
+      for (const s of candidates) {
+        if (competitors.length >= 5) break;
+        const k = (s.domain || '').replace(/^www\./, '').toLowerCase();
+        if (tried.has(k)) continue; tried.add(k);
+        try {
+          const exists = await competitorFinder.verifyStoreExists(s, { fastVerify: true });
+          if (!exists) continue;
+          const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(s, { fastVerify: true, trustedKnown: true });
+          if (qualifies) {
+            competitors.push(s);
+            seen.add(k);
+          }
+        } catch (_) {}
+      }
+    }
     if (!competitors || competitors.length < 5) {
       return res.status(400).json({ 
-        error: `Unable to find at least 5 live, high-ticket dropshipping competitors for "${niche}".`,
+        error: `Unable to find 5 live, high-ticket dropshipping competitors for "${niche}" within 3 minutes.`,
         suggestion: `Try a broader niche term or related variation.`,
         availableNiches: []
       });
