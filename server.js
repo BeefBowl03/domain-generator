@@ -1138,11 +1138,62 @@ app.post('/api/generate-domains', async (req, res) => {
       });
     }
     
+    // Serverless shortcut: avoid heavy AI competitor generation
+    if (isServerless) {
+      const competitors = allDatabaseResults.slice(0, 12);
+      if (competitors.length === 0) {
+        const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
+        return res.status(400).json({ 
+          error: `Unable to find dropshipping competitors for "${niche}" on serverless environment.`,
+          suggestion: `Try a broader niche term.`,
+          availableNiches
+        });
+      }
+      console.log('Analyzing domain patterns...');
+      const patterns = await analyzeDomainPatterns(competitors, niche);
+      if (!patterns) {
+        return res.status(500).json({ error: 'Failed to analyze domain patterns' });
+      }
+      console.log('Generating domain suggestions...');
+      const generatedDomains = await generateDomains(niche, patterns, 40);
+      console.log('Checking domain availability...');
+      let availableDomains = await checkDomainAvailability(generatedDomains);
+      if (availableDomains.length === 0) {
+        return res.status(400).json({ 
+          error: 'No available domains found under $100. Try a different niche or check again later.',
+          competitors,
+          patterns,
+          totalGenerated: generatedDomains.length,
+          totalAvailable: 0
+        });
+      }
+      console.log('Using AI to select best 6 domains...');
+      const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
+      if (selectedDomains.length < 6) {
+        const chosen = new Set(selectedDomains.map(d => d.domain));
+        for (const d of availableDomains) {
+          if (selectedDomains.length >= 6) break;
+          if (!chosen.has(d.domain)) selectedDomains.push(d);
+        }
+      }
+      const bestDomain = selectedDomains[0];
+      const alternatives = selectedDomains.slice(1);
+      return res.json({
+        competitors,
+        patterns,
+        recommendation: bestDomain,
+        alternatives,
+        totalGenerated: generatedDomains.length,
+        totalAvailable: availableDomains.length,
+        source: 'database'
+      });
+    }
+
     // STEP 2: If insufficient database results, use AI generation with 2-minute timeout
     console.log(`⚡ Found ${allDatabaseResults.length} database results - need AI generation with 2-minute timeout`);
     
     const startTime = Date.now();
-    const twoMinuteTimeout = 2 * 60 * 1000; // 2 minutes
+    const twoMinuteTimeout = isServerless ? 10000 : 2 * 60 * 1000; // shorter on serverless
     const deadlineAt = startTime + twoMinuteTimeout;
     
     let competitors = [...allDatabaseResults]; // Start with what we have
@@ -1428,6 +1479,9 @@ app.post('/api/audit-competitors', async (req, res) => {
     return res.status(400).json({ error: 'Niche is required' });
   }
   try {
+    if (isServerless) {
+      return res.status(405).json({ error: 'Disabled on serverless environment' });
+    }
     const result = await auditCompetitorsForNiche(niche, 120000);
     return res.json(result);
   } catch (error) {
@@ -1439,6 +1493,9 @@ app.post('/api/audit-competitors', async (req, res) => {
 // Audit ALL niches in our popular DB (and those present in SQLite) and persist results
 app.post('/api/audit-competitors-all', async (req, res) => {
   try {
+    if (isServerless) {
+      return res.status(405).json({ error: 'Disabled on serverless environment' });
+    }
     const popular = Object.keys(DOMAIN_DATABASES.popularNiches || {});
     const rows = db ? await dbAll('SELECT name FROM niches', []) : [];
     const fromDB = rows.map(r => r.name).filter(Boolean);
@@ -1468,6 +1525,9 @@ app.post('/api/set-curated-competitors', async (req, res) => {
     if (!niche || !Array.isArray(competitors)) {
       return res.status(400).json({ error: 'niche and competitors[] are required' });
     }
+    if (isServerless) {
+      return res.status(405).json({ error: 'Disabled on serverless environment' });
+    }
     const ok = await replaceCuratedStores(niche, competitors);
     return res.json({ ok: !!ok, niche, saved: competitors.length });
   } catch (error) {
@@ -1476,6 +1536,11 @@ app.post('/api/set-curated-competitors', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Domain generator server running at http://localhost:${port}`);
-});
+// Export handler for serverless, only listen locally in non-serverless
+if (!isServerless) {
+  app.listen(port, () => {
+    console.log(`Domain generator server running at http://localhost:${port}`);
+  });
+}
+
+module.exports = app;
