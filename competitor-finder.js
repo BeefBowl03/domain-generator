@@ -9,41 +9,34 @@ class CompetitorFinder {
         this.knownStores = {
             'backyard': [
                 { name: 'Yard Mastery', url: 'https://yardmastery.com', domain: 'yardmastery.com' },
-                { name: 'Green Sanctuary', url: 'https://greensanctuary.com', domain: 'greensanctuary.com' },
-                { name: 'Patio Paradise', url: 'https://patioparadise.com', domain: 'patioparadise.com' },
-                { name: 'Deck Dynasty', url: 'https://deckdynasty.com', domain: 'deckdynasty.com' },
-                { name: 'Lawn Legends', url: 'https://lawnlegends.com', domain: 'lawnlegends.com' }
+                { name: 'Wayfair Outdoor', url: 'https://wayfair.com/outdoor', domain: 'wayfair.com' },
+                { name: 'Home Depot Outdoor', url: 'https://homedepot.com/outdoor', domain: 'homedepot.com' },
+               
+                { name: 'Hayneedle Outdoor', url: 'https://hayneedle.com/outdoor', domain: 'hayneedle.com' }
             ],
             'pizza oven': [
-                { name: 'Pizza Oven Studio', url: 'https://pizzaovenstudio.com', domain: 'pizzaovenstudio.com' },
-                { name: 'Outdoor Pizza Co', url: 'https://outdoorpizzaco.com', domain: 'outdoorpizzaco.com' },
-                { name: 'Fire & Stone Ovens', url: 'https://fireandstoneovens.com', domain: 'fireandstoneovens.com' },
-                { name: 'Artisan Oven Works', url: 'https://artisanovenworks.com', domain: 'artisanovenworks.com' },
-                { name: 'Pizza Craft Direct', url: 'https://pizzacraftdirect.com', domain: 'pizzacraftdirect.com' }
+                { name: 'Authentic Pizza Ovens', url: 'https://authenticpizzaovens.com', domain: 'authenticpizzaovens.com' },
+                { name: 'Pizza Oven Outlet', url: 'https://pizzaovenoutlet.com', domain: 'pizzaovenoutlet.com' },
+                { name: 'Forno Bravo', url: 'https://fornobravo.com', domain: 'fornobravo.com' }
             ],
             'drone': [
                 { name: 'RaceDayQuads', url: 'https://racedayquads.com', domain: 'racedayquads.com' },
-                { name: 'GetFPV', url: 'https://getfpv.com', domain: 'getfpv.com' },
                 { name: 'Ready Made RC', url: 'https://readymaderc.com', domain: 'readymaderc.com' },
-                { name: 'Drone Racing Supply', url: 'https://droneracingsupply.com', domain: 'droneracingsupply.com' },
                 { name: 'FPV Cycle', url: 'https://fpvcycle.com', domain: 'fpvcycle.com' },
                 { name: 'Pyro Drone', url: 'https://pyrodrone.com', domain: 'pyrodrone.com' },
-                { name: 'Unmanned Tech', url: 'https://unmannedtechshop.co.uk', domain: 'unmannedtechshop.co.uk' },
-                { name: 'DJI Store', url: 'https://store.dji.com', domain: 'store.dji.com' }
+                { name: 'Unmanned Tech', url: 'https://unmannedtechshop.co.uk', domain: 'unmannedtechshop.co.uk' }
             ],
             'kitchen': [
-                { name: 'Chef Arsenal', url: 'https://chefarsenal.com', domain: 'chefarsenal.com' },
-                { name: 'Kitchen Craft Pro', url: 'https://kitchencraftpro.com', domain: 'kitchencraftpro.com' },
-                { name: 'Culinary Elite', url: 'https://culinaryelite.com', domain: 'culinaryelite.com' },
-                { name: 'Pro Kitchen Direct', url: 'https://prokitchendirect.com', domain: 'prokitchendirect.com' },
-                { name: 'Master Chef Tools', url: 'https://mastercheftools.com', domain: 'mastercheftools.com' }
+                { name: 'Kitchen Source', url: 'https://kitchensource.com', domain: 'kitchensource.com' },
+                { name: 'Cooking.com', url: 'https://cooking.com', domain: 'cooking.com' },
+                { name: 'Kitchen Kaboodle', url: 'https://kitchenkaboodle.com', domain: 'kitchenkaboodle.com' },
+                { name: 'Williams Sonoma', url: 'https://williams-sonoma.com', domain: 'williams-sonoma.com' }
             ],
             'golf': [
-                { name: 'Golf Pro Warehouse', url: 'https://golfprowarehouse.com', domain: 'golfprowarehouse.com' },
                 { name: 'Elite Golf Gear', url: 'https://elitegolfgear.com', domain: 'elitegolfgear.com' },
-                { name: 'Pro Shop Direct', url: 'https://proshopdirect.com', domain: 'proshopdirect.com' },
                 { name: 'Golf Masters Store', url: 'https://golfmastersstore.com', domain: 'golfmastersstore.com' },
-                { name: 'Premium Golf Supply', url: 'https://premiumgolfsupply.com', domain: 'premiumgolfsupply.com' }
+                { name: 'Rock Bottom Golf', url: 'https://rockbottomgolf.com', domain: 'rockbottomgolf.com' },
+                { name: 'Golf Galaxy', url: 'https://golfgalaxy.com', domain: 'golfgalaxy.com' }
             ],
             'firepit': [
                 { name: 'Fire Pit Surplus', url: 'https://firepitsurplus.com', domain: 'firepitsurplus.com' },
@@ -60,10 +53,8 @@ class CompetitorFinder {
                 { name: 'BBQ Island', url: 'https://bbqisland.com', domain: 'bbqisland.com' }
             ],
             'marine': [
-                { name: 'Boat Parts Inventory', url: 'https://boatpartsinventory.com', domain: 'boatpartsinventory.com' },
                 { name: 'Marine Engine Parts', url: 'https://marineengineparts.com', domain: 'marineengineparts.com' },
                 { name: 'Wholesale Marine', url: 'https://wholesalemarine.com', domain: 'wholesalemarine.com' },
-                { name: 'Boat Gear Depot', url: 'https://boatgeardepot.com', domain: 'boatgeardepot.com' },
                 { name: 'iBoats', url: 'https://iboats.com', domain: 'iboats.com' }
             ],
             'horse riding': [
@@ -74,17 +65,16 @@ class CompetitorFinder {
                 { name: 'Horse Tack Co', url: 'https://horsetackco.com', domain: 'horsetackco.com' }
             ],
             'wellness': [
-                { name: 'Wellness Warehouse', url: 'https://wellnesswarehouse.com', domain: 'wellnesswarehouse.com' },
                 { name: 'Health Products For You', url: 'https://healthproductsforyou.com', domain: 'healthproductsforyou.com' },
                 { name: 'Vitacost', url: 'https://vitacost.com', domain: 'vitacost.com' },
-                { name: 'eVitamins', url: 'https://evitamins.com', domain: 'evitamins.com' },
-                { name: 'Wellness.com', url: 'https://wellness.com', domain: 'wellness.com' }
+                { name: 'iHerb', url: 'https://iherb.com', domain: 'iherb.com' },
+                { name: 'Thrive Market', url: 'https://thrivemarket.com', domain: 'thrivemarket.com' }
             ],
             'outdoor': [
                 { name: 'Outdoor Element', url: 'https://outdoorelement.com', domain: 'outdoorelement.com' },
                 { name: 'Gear Trade', url: 'https://geartrade.com', domain: 'geartrade.com' },
                 { name: 'Outdoor Gear Exchange', url: 'https://gearx.com', domain: 'gearx.com' },
-                { name: 'Campmor', url: 'https://campmor.com', domain: 'campmor.com' },
+       
                 { name: 'Sierra Trading Post', url: 'https://sierra.com', domain: 'sierra.com' }
             ],
             'adventure': [
@@ -104,9 +94,7 @@ class CompetitorFinder {
             'smart home': [
                 { name: 'Smart Home Store', url: 'https://smarthomestore.com', domain: 'smarthomestore.com' },
                 { name: 'Home Controls', url: 'https://homecontrols.com', domain: 'homecontrols.com' },
-                { name: 'SmartThings Store', url: 'https://smartthingsstore.com', domain: 'smartthingsstore.com' },
                 { name: 'Automated Outlet', url: 'https://automatedoutlet.com', domain: 'automatedoutlet.com' },
-                { name: 'Smart Home Direct', url: 'https://smarthomedirect.com', domain: 'smarthomedirect.com' }
             ],
             'fitness': [
                 { name: 'Rogue Fitness', url: 'https://www.roguefitness.com', domain: 'roguefitness.com' },
@@ -158,11 +146,9 @@ class CompetitorFinder {
                 { name: 'Baby Bunting', url: 'https://babybunting.com', domain: 'babybunting.com' }
             ],
             'pet': [
-                { name: 'Pet Supplies Plus', url: 'https://petsuppliesplus.com', domain: 'petsuppliesplus.com' },
-                { name: 'Petflow', url: 'https://petflow.com', domain: 'petflow.com' },
-                { name: 'Pet Mountain', url: 'https://petmountain.com', domain: 'petmountain.com' },
                 { name: 'Entirely Pets', url: 'https://entirelypets.com', domain: 'entirelypets.com' },
-                { name: 'Pet Supermarket', url: 'https://petsupermarket.com', domain: 'petsupermarket.com' }
+                { name: 'Chewy', url: 'https://chewy.com', domain: 'chewy.com' },
+                { name: 'Petco', url: 'https://petco.com', domain: 'petco.com' }
             ],
             'electronics': [
                 { name: 'Electronics Expo', url: 'https://electronicsexpo.com', domain: 'electronicsexpo.com' },
@@ -233,7 +219,7 @@ class CompetitorFinder {
         
         // Add common related terms
         const relatedTerms = {
-            'backyard': ['outdoor', 'patio', 'garden', 'yard', 'lawn', 'deck', 'landscape'],
+            'backyard': ['patio', 'garden', 'yard', 'lawn', 'deck', 'landscape'],
             'pizza oven': ['outdoor oven', 'wood fired oven', 'pizza', 'oven', 'outdoor cooking', 'backyard cooking'],
             'drone': ['uav', 'quadcopter', 'aerial', 'drone photography', 'fpv', 'rc drone', 'quad', 'quads', 'multirotor'],
             'kitchen': ['culinary', 'cooking', 'chef', 'cookware', 'kitchen equipment', 'appliances'],
@@ -253,9 +239,9 @@ class CompetitorFinder {
             // Map common synonyms so non-DB niches find neighbors
             'electronics': ['gadgets', 'tech', 'consumer electronics', 'smart devices', 'home electronics', 'audio video'],
             'gadgets': ['electronics', 'tech gadgets', 'consumer electronics', 'smart devices'],
-            // Landscape synonyms should route to backyard/outdoor ecosystems
-            'landscape': ['backyard', 'outdoor', 'garden', 'yard', 'lawn', 'patio', 'deck', 'landscaping'],
-            'landscaping': ['backyard', 'outdoor', 'garden', 'yard', 'lawn', 'patio', 'deck', 'landscape'],
+            // Landscape synonyms should route to backyard ecosystems
+            'landscape': ['backyard', 'garden', 'yard', 'lawn', 'patio', 'deck', 'landscaping'],
+            'landscaping': ['backyard', 'garden', 'yard', 'lawn', 'patio', 'deck', 'landscape'],
 
             // Database-driven type words → canonical niches
             // Backyard cluster
@@ -263,7 +249,7 @@ class CompetitorFinder {
             'barbecue': ['bbq', 'grill', 'smoker', 'outdoor cooking', 'fire'],
             'fire': ['firepit', 'flame', 'hearth', 'backyard'],
             'pool': ['spa', 'hot tub', 'swim', 'deck', 'patio', 'backyard'],
-            'garden': ['landscape', 'lawn', 'plant', 'yard', 'outdoor'],
+            'garden': ['landscape', 'lawn', 'plant', 'yard'],
             'yard': ['lawn', 'garden', 'landscape', 'backyard'],
             'mower': ['mowing', 'cutting', 'trimmer', 'yard', 'lawn'],
             'equipment': ['tools', 'machinery', 'gear', 'equipment'],

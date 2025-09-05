@@ -20,7 +20,7 @@ const DOMAIN_DATABASES = {
     // Used to: (1) Prefer preloaded competitors first; (2) Enforce exactly 5 when in DB; (3) Provide suggestions on errors
     popularNiches: {
         'backyard': {
-            synonyms: ['outdoor', 'patio', 'garden', 'yard', 'lawn', 'landscape', 'deck']
+            synonyms: ['patio', 'garden', 'yard', 'lawn', 'landscape', 'deck']
         },
         'pizza oven': {
             synonyms: ['outdoor oven', 'wood fired oven', 'backyard cooking']
@@ -54,11 +54,11 @@ const DOMAIN_DATABASES = {
     // High-Ticket Niche Terms (products $1000+)
     nicheTerms: {
         'backyard': [
-            'yard', 'patio', 'garden', 'lawn', 'outdoor', 'deck', 'landscape', 
+            'yard', 'patio', 'garden', 'lawn', 'deck', 'landscape', 
             'green', 'turf', 'grass', 'BBQ', 'grill', 'fire', 'backyard'
         ],
         'bbq': ['bbq', 'barbecue', 'grill', 'smoker', 'smoke', 'flame', 'char', 'cookout', 'fire'],
-        'fire': ['fire', 'flame', 'ember', 'glow', 'warmth', 'hearth', 'camp', 'spark'],
+        'fire': ['fire', 'flame', 'ember', 'glow', 'warmth', 'hearth', 'spark'],
         'pool': ['pool', 'spa', 'hot tub', 'swim', 'deck', 'tiles', 'patio'],
         'garden': ['garden', 'landscape', 'lawn', 'plant', 'bloom', 'grow', 'green'],
         'wellness': [
@@ -130,11 +130,11 @@ const DOMAIN_DATABASES = {
     // Niche variations - different ways of describing the same niche
     nicheVariations: {
         'backyard': [
-            'yard', 'lawn', 'garden', 'patio', 'outdoor', 'landscape', 'deck', 
+            'yard', 'lawn', 'garden', 'patio', 'landscape', 'deck', 
             'green', 'turf', 'grass', 'exterior', 'grounds', 'property', 'estate', 'courtyard'
         ],
         'bbq': ['barbecue', 'bbq', 'grill', 'grilling', 'smoker', 'smoke', 'cookout', 'pit', 'fire'],
-        'fire': ['flame', 'ember', 'glow', 'warmth', 'hearth', 'campfire', 'fire'],
+        'fire': ['flame', 'ember', 'glow', 'warmth', 'hearth', 'fire'],
         'pool': ['pool', 'hot tub', 'spa', 'swim', 'deck', 'patio'],
         'garden': ['garden', 'landscape', 'lawn', 'plant', 'green', 'bloom', 'grow'],
         'wellness': [
@@ -240,7 +240,7 @@ const DOMAIN_DATABASES = {
     // Niche-specific avoid terms to keep advice contextual
     nicheAvoid: {
         'backyard': ['mulch', 'hose', 'flowerpot', 'weedwhacker', 'plastic furniture'],
-        'bbq': ['charcoal-only', 'tabletop-only', 'camp stoves'],
+        'bbq': ['charcoal-only', 'tabletop-only', 'portable stoves'],
         'fire': ['matches', 'lighters', 'candles'],
         'pool': ['toys', 'floaties', 'goggles'],
         'garden': ['seeds bulk', 'fertilizer cheap'],

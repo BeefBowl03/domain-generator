@@ -1008,7 +1008,7 @@ app.post('/api/generate-domains', async (req, res) => {
   
   try {
     console.log(`🔍 Searching for competitors for niche: ${niche}`);
-    
+
     const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
     
     // STEP 1: Check database first for similar/related niches - RETURN IMMEDIATELY if found
@@ -1016,7 +1016,7 @@ app.post('/api/generate-domains', async (req, res) => {
     
     // Check exact niche first
     const curated = await fetchCuratedStores(niche);
-    
+
     // Check similar/related niches using known stores wide search
     const knownStores = competitorFinder.getKnownStoresWide(niche) || [];
     
@@ -1178,7 +1178,7 @@ app.post('/api/generate-domains', async (req, res) => {
     
     // Ensure we have at least 1 store (as requested)
     if (competitors.length === 0) {
-      const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
+    const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
       return res.status(400).json({ 
         error: `Unable to find dropshipping competitors for "${niche}". This could be because the niche is too specific or the AI couldn't find relevant high-ticket dropshipping stores.`,
         suggestion: `Try a broader niche term.`,
