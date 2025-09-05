@@ -446,6 +446,87 @@ function generateFallbackRecommendations(niche, industryTerms, nicheKeywords) {
   };
 }
 
+// Utility: remove generic prefixes/suffixes from niche keywords before returning to client
+function removePrefixesAndSuffixesFromKeywords(niche, keywords = []) {
+  try {
+    const lower = (s) => String(s || '').toLowerCase().trim();
+    const normalized = lower(String(niche || '').replace(/\s+/g, ' '));
+
+    // Build base words for this niche from DB terms, variations and popular synonyms
+    const baseSources = [];
+    if (DOMAIN_DATABASES.nicheTerms && DOMAIN_DATABASES.nicheTerms[normalized]) baseSources.push(...DOMAIN_DATABASES.nicheTerms[normalized]);
+    if (DOMAIN_DATABASES.nicheVariations && DOMAIN_DATABASES.nicheVariations[normalized]) baseSources.push(...DOMAIN_DATABASES.nicheVariations[normalized]);
+    if (DOMAIN_DATABASES.popularNiches && DOMAIN_DATABASES.popularNiches[normalized] && Array.isArray(DOMAIN_DATABASES.popularNiches[normalized].synonyms)) {
+      baseSources.push(...DOMAIN_DATABASES.popularNiches[normalized].synonyms);
+    }
+    // Always include the niche itself
+    baseSources.push(normalized);
+
+    const tokenize = (t) => lower(t).split(/[^a-z0-9]+/).filter(Boolean);
+
+    const baseWords = new Set();
+    for (const term of baseSources) {
+      for (const tok of tokenize(term)) {
+        if (tok.length >= 3) baseWords.add(tok);
+      }
+    }
+
+    // Generic adjectives/prefixes and generic suffix nouns likely to appear
+    const genericPrefixes = new Set([
+      'luxury','premium','elegant','highend','elite','prime','pro','smart','modern','advanced','ultimate','deluxe','best','top','master','expert'
+    ]);
+    const suffixList = (DOMAIN_DATABASES.suffixes || []).map(lower);
+    const genericSuffixes = new Set([
+      ...suffixList,
+      'paradise','retreat','retreats','oasis','world','club'
+    ]);
+
+    const simplify = (kw) => {
+      const raw = lower(kw).replace(/[^a-z0-9]/g, '');
+      if (!raw) return null;
+
+      // If raw exactly matches a generic prefix/suffix, drop it
+      if (genericPrefixes.has(raw) || genericSuffixes.has(raw)) return null;
+
+      // Prefer longest base word contained in the keyword (handles concatenations like luxurybackyard)
+      let best = null;
+      for (const base of baseWords) {
+        if (raw.includes(base)) {
+          if (!best || base.length > best.length) best = base;
+        }
+      }
+      if (best) return best;
+
+      // As fallback, try to strip leading known adjectives and trailing generic suffixes if tokenized
+      const tokens = raw.split(/(?=[A-Z])/); // unlikely camelCase; fallback below
+      if (tokens.length > 1) {
+        let arr = tokens.map(lower).filter(Boolean);
+        while (arr.length && genericPrefixes.has(arr[0])) arr.shift();
+        while (arr.length && genericSuffixes.has(arr[arr.length - 1])) arr.pop();
+        const joined = arr.join('');
+        if (joined && baseWords.has(joined)) return joined;
+      }
+
+      // If nothing matched, keep keyword only if not generic
+      return (genericPrefixes.has(raw) || genericSuffixes.has(raw)) ? null : raw;
+    };
+
+    const cleaned = [];
+    const seen = new Set();
+    for (const k of (keywords || [])) {
+      const s = simplify(k);
+      if (!s) continue;
+      if (s.length < 3) continue;
+      if (seen.has(s)) continue;
+      seen.add(s);
+      cleaned.push(s);
+    }
+    return cleaned;
+  } catch (_) {
+    return keywords || [];
+  }
+}
+
 // AI-powered niche analysis using OpenAI (fast model)
 async function analyzeNicheWithAI(niche) {
   const prompt = `Analyze the "${niche}" niche for high-ticket dropshipping business.
@@ -1073,7 +1154,14 @@ app.post('/api/generate-domains', async (req, res) => {
       
       // Continue with domain generation using database results
       console.log('Analyzing domain patterns...');
-      const patterns = await analyzeDomainPatterns(competitors, niche);
+      const patternsRaw = await analyzeDomainPatterns(competitors, niche);
+      const canonical = String(niche || '').toLowerCase().trim().replace(/\s+/g,' ');
+      const normalized = competitorFinder && typeof competitorFinder.normalizeNiche === 'function' ? competitorFinder.normalizeNiche(canonical) : canonical;
+      const strict = DOMAIN_DATABASES.strictNicheKeywords && (DOMAIN_DATABASES.strictNicheKeywords[normalized] || DOMAIN_DATABASES.strictNicheKeywords[canonical]);
+      const patterns = {
+        ...patternsRaw,
+        nicheKeywords: strict ? strict : removePrefixesAndSuffixesFromKeywords(niche, patternsRaw && patternsRaw.nicheKeywords)
+      };
       
       if (!patterns) {
         return res.status(500).json({ error: 'Failed to analyze domain patterns' });
@@ -1084,9 +1172,9 @@ app.post('/api/generate-domains', async (req, res) => {
       
       console.log('Checking domain availability...');
       let availableDomains = await checkDomainAvailability(generatedDomains);
-      if (isServerless && availableDomains.length === 0) {
-        // Serverless fallback: ensure we have something to display
-        availableDomains = generatedDomains.slice(0, 8).map((d, i) => ({ domain: d, available: true, price: 12 + i }));
+      if (isServerless && availableDomains.length === 0 && !namecomAPI) {
+        // Serverless fallback only when Name.com API is not configured
+        availableDomains = generatedDomains.slice(0, 8).map((d, i) => ({ domain: d, available: true, price: 15 + i }));
       }
       
       // Ensure we have at least 6 available domains
@@ -1226,7 +1314,14 @@ app.post('/api/generate-domains', async (req, res) => {
       }
 
       console.log('Analyzing domain patterns...');
-      const patterns = await analyzeDomainPatterns(competitors, niche);
+      const patternsRaw = await analyzeDomainPatterns(competitors, niche);
+      const canonical = String(niche || '').toLowerCase().trim().replace(/\s+/g,' ');
+      const normalized = competitorFinder && typeof competitorFinder.normalizeNiche === 'function' ? competitorFinder.normalizeNiche(canonical) : canonical;
+      const strict = DOMAIN_DATABASES.strictNicheKeywords && (DOMAIN_DATABASES.strictNicheKeywords[normalized] || DOMAIN_DATABASES.strictNicheKeywords[canonical]);
+      const patterns = {
+        ...patternsRaw,
+        nicheKeywords: strict ? strict : removePrefixesAndSuffixesFromKeywords(niche, patternsRaw && patternsRaw.nicheKeywords)
+      };
       if (!patterns) {
         return res.status(500).json({ error: 'Failed to analyze domain patterns' });
       }
@@ -1234,9 +1329,9 @@ app.post('/api/generate-domains', async (req, res) => {
       const generatedDomains = await generateDomains(niche, patterns, 40);
       console.log('Checking domain availability...');
       let availableDomains = await checkDomainAvailability(generatedDomains);
-      if (availableDomains.length === 0) {
-        // Serverless fallback: mock a handful as available to prevent user-facing 400s
-        availableDomains = generatedDomains.slice(0, 8).map((d, i) => ({ domain: d, available: true, price: 12 + i }));
+      if (availableDomains.length === 0 && !namecomAPI) {
+        // Serverless fallback only when Name.com API is not configured
+        availableDomains = generatedDomains.slice(0, 8).map((d, i) => ({ domain: d, available: true, price: 15 + i }));
       }
       if (availableDomains.length === 0) {
         return res.status(400).json({ 
@@ -1344,7 +1439,14 @@ app.post('/api/generate-domains', async (req, res) => {
 
     // 2. Analyze domain patterns
     console.log('Analyzing domain patterns...');
-    const patterns = await analyzeDomainPatterns(competitors, niche);
+    const patternsRaw = await analyzeDomainPatterns(competitors, niche);
+    // Override niche keywords using strict database where available; otherwise, clean
+    const canonical = String(niche || '').toLowerCase().trim().replace(/\s+/g,' ');
+    const strict = (DOMAIN_DATABASES.strictNicheKeywords && (DOMAIN_DATABASES.strictNicheKeywords[canonical] || DOMAIN_DATABASES.strictNicheKeywords[competitorFinder && competitorFinder.normalizeNiche ? competitorFinder.normalizeNiche(canonical) : canonical])) || null;
+    const patterns = {
+      ...patternsRaw,
+      nicheKeywords: strict ? strict : removePrefixesAndSuffixesFromKeywords(niche, patternsRaw && patternsRaw.nicheKeywords)
+    };
     
     if (!patterns) {
       return res.status(500).json({ error: 'Failed to analyze domain patterns' });

@@ -39,6 +39,89 @@ const DOMAIN_DATABASES = {
         'home theater': { synonyms: ['theater seating', 'projector', 'audio'] }
     },
 
+    // High-ticket physical product niche keywords (strict list used for UI display)
+    strictNicheKeywords: {
+        // BACKYARD NICHE
+        'backyard': ['backyard', 'yard', 'patio', 'deck', 'outdoor'],
+        'bbq': ['bbq', 'barbecue', 'grill', 'grilling', 'smoker'],
+        'fire': ['fire', 'fireplace', 'firepit', 'flame'],
+        'pool': ['pool', 'spa', 'hot', 'tub', 'swim'],
+        'garden': ['garden', 'landscape', 'lawn', 'plant'],
+
+        // SMART HOME NICHE
+        'smart': ['smart', 'automated', 'connected', 'intelligent'],
+        'home': ['home', 'house', 'residence', 'domestic'],
+        'security': ['security', 'camera', 'alarm', 'monitoring'],
+        'lighting': ['lighting', 'lights', 'led', 'illumination'],
+        'climate': ['climate', 'thermostat', 'heating', 'cooling'],
+
+        // YARD EQUIPMENT NICHE  
+        'yard': ['yard', 'lawn', 'garden', 'landscape'],
+        'mower': ['mower', 'mowing', 'cutting', 'trimmer'],
+        'equipment': ['equipment', 'tools', 'machinery', 'gear'],
+        'maintenance': ['maintenance', 'care', 'upkeep'],
+
+        // WELLNESS NICHE
+        'wellness': ['wellness', 'health', 'wellbeing', 'recovery'],
+        'massage': ['massage', 'therapy', 'relaxation', 'spa'],
+        'sauna': ['sauna', 'steam', 'infrared', 'heat'],
+        'meditation': ['meditation', 'mindfulness', 'zen', 'calm'],
+
+        // FITNESS NICHE
+        'fitness': ['fitness', 'gym', 'workout', 'exercise'],
+        'strength': ['strength', 'weight', 'power', 'muscle'],
+        'cardio': ['cardio', 'running', 'cycling', 'endurance'],
+        'machine': ['machine', 'gear', 'apparatus'],
+
+        // GARAGE NICHE
+        'garage': ['garage', 'workshop', 'storage', 'workspace'],
+        'tool': ['tool', 'tools', 'equipment', 'machinery'],
+        'automotive': ['automotive', 'car', 'vehicle', 'auto'],
+        'organization': ['organization', 'storage', 'cabinet', 'rack'],
+
+        // OUTDOOR/ADVENTURE NICHE
+        'outdoor': ['outdoor', 'adventure', 'camping', 'hiking'],
+        'gear': ['gear', 'equipment', 'tools', 'apparatus'],
+        'survival': ['survival', 'tactical', 'emergency', 'prep'],
+        'recreation': ['recreation', 'activity', 'sport', 'leisure'],
+
+        // MARINE NICHE
+        'marine': ['marine', 'boat', 'yacht', 'vessel'],
+        'water': ['water', 'ocean', 'sea', 'lake'],
+        'fishing': ['fishing', 'angling', 'catch', 'tackle'],
+        'navigation': ['navigation', 'gps', 'compass', 'chart'],
+
+        // HORSE RIDING NICHE
+        'horse': ['horse', 'equine', 'equestrian', 'riding'],
+        'riding': ['riding', 'saddle', 'bridle', 'tack'],
+        'stable': ['stable', 'barn', 'arena', 'paddock'],
+        'training': ['training', 'dressage', 'jumping', 'competition'],
+
+        // HOME AND LIVING NICHE
+        'living': ['living', 'interior', 'design', 'decor'],
+        'furniture': ['furniture', 'seating', 'table', 'storage'],
+        'comfort': ['comfort', 'luxury', 'premium', 'quality'],
+        'space': ['space', 'room', 'area', 'environment'],
+
+        // BIOHACKING NICHE
+        'biohacking': ['biohacking', 'optimization', 'enhancement', 'performance'],
+        'recovery': ['recovery', 'regeneration', 'restoration', 'healing'],
+        'monitoring': ['monitoring', 'tracking', 'measurement', 'data'],
+        'enhancement': ['enhancement', 'improvement', 'upgrade', 'boost'],
+
+        // E-VEHICLE NICHE
+        'electric': ['electric', 'ev', 'battery', 'powered'],
+        'vehicle': ['vehicle', 'car', 'bike', 'scooter'],
+        'charging': ['charging', 'charger', 'station', 'power'],
+        'mobility': ['mobility', 'transport', 'travel', 'commute'],
+
+        // KITCHEN APPLIANCES NICHE
+        'kitchen': ['kitchen', 'culinary', 'cooking', 'chef'],
+        'appliance': ['appliance', 'equipment', 'machine', 'device'],
+        'cooking': ['cooking', 'baking', 'roasting', 'preparation'],
+        'professional': ['professional', 'commercial', 'grade', 'quality']
+    },
+
     // High-Ticket Niche Terms (products $1000+)
     nicheTerms: {
         'backyard': [
