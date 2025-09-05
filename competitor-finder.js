@@ -22,11 +22,14 @@ class CompetitorFinder {
                 { name: 'Pizza Craft Direct', url: 'https://pizzacraftdirect.com', domain: 'pizzacraftdirect.com' }
             ],
             'drone': [
-                { name: 'Drone Masters Pro', url: 'https://dronemasterspro.com', domain: 'dronemasterspro.com' },
-                { name: 'Sky Tech Drones', url: 'https://skytechdrones.com', domain: 'skytechdrones.com' },
-                { name: 'Aerial Dynamics', url: 'https://aerialdynamics.com', domain: 'aerialdynamics.com' },
-                { name: 'Pro Drone Hub', url: 'https://prodronehub.com', domain: 'prodronehub.com' },
-                { name: 'Elite UAV Store', url: 'https://eliteuavstore.com', domain: 'eliteuavstore.com' }
+                { name: 'RaceDayQuads', url: 'https://racedayquads.com', domain: 'racedayquads.com' },
+                { name: 'GetFPV', url: 'https://getfpv.com', domain: 'getfpv.com' },
+                { name: 'Ready Made RC', url: 'https://readymaderc.com', domain: 'readymaderc.com' },
+                { name: 'Drone Racing Supply', url: 'https://droneracingsupply.com', domain: 'droneracingsupply.com' },
+                { name: 'FPV Cycle', url: 'https://fpvcycle.com', domain: 'fpvcycle.com' },
+                { name: 'Pyro Drone', url: 'https://pyrodrone.com', domain: 'pyrodrone.com' },
+                { name: 'Unmanned Tech', url: 'https://unmannedtechshop.co.uk', domain: 'unmannedtechshop.co.uk' },
+                { name: 'DJI Store', url: 'https://store.dji.com', domain: 'store.dji.com' }
             ],
             'kitchen': [
                 { name: 'Chef Arsenal', url: 'https://chefarsenal.com', domain: 'chefarsenal.com' },

@@ -1007,103 +1007,195 @@ app.post('/api/generate-domains', async (req, res) => {
   const { niche } = req.body;
   
   try {
-    // No cache lookup; always compute fresh results
-    // 1. Find dropshipping competitor stores
-    console.log(`Finding dropshipping competitor stores for: ${niche}`);
-    // Strict competitor retrieval with a 3-minute deadline
-    const deadlineAt = Date.now() + 3 * 60 * 1000;
-
+    console.log(`🔍 Searching for competitors for niche: ${niche}`);
+    
     const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
+    
+    // STEP 1: Check database first for similar/related niches - RETURN IMMEDIATELY if found
+    console.log(`📊 Checking database for existing competitors...`);
+    
+    // Check exact niche first
     const curated = await fetchCuratedStores(niche);
-
-    let competitors = [];
-
-    if (Array.isArray(curated) && curated.length > 0) {
-      // If we have curated entries in SQLite for this niche, start with those (verified live + relevant)
-      const verified = [];
-      const seen = new Set();
-      await Promise.all((curated || []).map(async (s) => {
-        try {
-          const key = (s && s.domain) ? String(s.domain).replace(/^www\./,'').toLowerCase() : null;
-          if (!key || seen.has(key)) return;
-          const exists = await competitorFinder.verifyStoreExists(s, { fastVerify: true });
-          if (!exists) return;
-          const relevant = await competitorFinder.isRelevantToNiche(s, niche, { checkContent: false });
-          if (!relevant) return;
-          verified.push(s);
-          seen.add(key);
-        } catch (_) {}
-      }));
-
-      // Top up to 5 if curated live results are fewer than 5
-      if (verified.length < 5) {
-        // 1) Strict verified search (AI/known) to add missing items
-        try {
-          const strict = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
-          for (const s of (strict || [])) {
-            if (verified.length >= 5) break;
-            const key = String(s.domain || '').replace(/^https?:\/\//,'').replace(/^www\./,'').toLowerCase();
-            if (!key || seen.has(key)) continue;
-            verified.push(s);
-            seen.add(key);
+    
+    // Check similar/related niches using known stores wide search
+    const knownStores = competitorFinder.getKnownStoresWide(niche) || [];
+    
+    // Combine database results (curated + known stores)
+    const allDatabaseResults = [];
+    const seenDomains = new Set();
+    
+    // Add curated stores (already verified and relevant)
+    if (Array.isArray(curated)) {
+      for (const store of curated) {
+        if (store && store.domain) {
+          const domainKey = String(store.domain).replace(/^www\./,'').toLowerCase();
+          if (!seenDomains.has(domainKey)) {
+            allDatabaseResults.push(store);
+            seenDomains.add(domainKey);
           }
-        } catch (_) {}
-
-        // 2) If still short, widen to known stores (fast verification + shallow relevance)
-        if (verified.length < 5) {
-          const wide = competitorFinder.getKnownStoresWide(niche) || [];
-          await Promise.all(wide.map(async (c) => {
-            if (verified.length >= 5) return;
-            try {
-              const key = String(c.domain || '').replace(/^https?:\/\//,'').replace(/^www\./,'').toLowerCase();
-              if (!key || seen.has(key)) return;
-              const relevant = await competitorFinder.isRelevantToNiche(c, niche, { checkContent: false });
-              if (!relevant) return;
-              const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true });
-              if (!exists) return;
-              const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
-              if (!qualifies) return;
-              verified.push(c);
-              seen.add(key);
-            } catch (_) {}
-          }));
         }
       }
-
-      // Use whatever we have (even if fewer than 5)
-      if (verified.length > 0) {
-        competitors = verified;
-      } else {
-        // Curated exists but none verified live; fallback to strict verified search to avoid empty results
-        const strict = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
-        competitors = strict || [];
-      }
-    } else {
-      // No curated entries; first try strict verified search
-      let strict = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
-      competitors = strict || [];
-
-      // If still empty, widen to known wide candidates with fast verification and shallow relevance
-      if (!competitors || competitors.length === 0) {
-        const wide = competitorFinder.getKnownStoresWide(niche) || [];
-        const verified = [];
-        const seen = new Set();
-        await Promise.all(wide.map(async (c) => {
+    }
+    
+    // Add known stores (pre-verified, just check relevance without verification)
+    for (const store of knownStores) {
+      if (store && store.domain) {
+        const domainKey = String(store.domain).replace(/^www\./,'').toLowerCase();
+        if (!seenDomains.has(domainKey)) {
           try {
-            const key = String(c.domain || '').replace(/^https?:\/\//,'').replace(/^www\./,'').toLowerCase();
-            if (!key || seen.has(key)) return;
-            const relevant = await competitorFinder.isRelevantToNiche(c, niche, { checkContent: false });
-            if (!relevant) return;
-            const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true });
-            if (!exists) return;
-            const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
-            if (!qualifies) return;
-            verified.push(c);
-            seen.add(key);
-          } catch (_) {}
-        }));
-        competitors = verified;
+            // Only check relevance, skip verification (as requested)
+            const relevant = await competitorFinder.isRelevantToNiche(store, niche, { checkContent: false });
+            if (relevant) {
+              allDatabaseResults.push(store);
+              seenDomains.add(domainKey);
+            }
+          } catch (_) {
+            // If relevance check fails, still include it (better to have results)
+            allDatabaseResults.push(store);
+            seenDomains.add(domainKey);
+          }
+        }
       }
+    }
+    
+    // If we have 5+ database results, return immediately (no AI processing needed)
+    if (allDatabaseResults.length >= 5) {
+      console.log(`✅ Found ${allDatabaseResults.length} competitors in database - returning immediately!`);
+      const competitors = allDatabaseResults.slice(0, 12); // Take up to 12 for variety
+      
+      // Continue with domain generation using database results
+      console.log('Analyzing domain patterns...');
+      const patterns = await analyzeDomainPatterns(competitors, niche);
+      
+      if (!patterns) {
+        return res.status(500).json({ error: 'Failed to analyze domain patterns' });
+      }
+
+      console.log('Generating domain suggestions...');
+      const generatedDomains = await generateDomains(niche, patterns, 40);
+      
+      console.log('Checking domain availability...');
+      let availableDomains = await checkDomainAvailability(generatedDomains);
+      
+      // Ensure we have at least 6 available domains
+      let attempts = 0;
+      while (availableDomains.length < 6 && attempts < 2) {
+        attempts++;
+        console.log(`ℹ️ Not enough available domains (${availableDomains.length}). Generating more (attempt ${attempts})...`);
+        const moreGenerated = await generateDomains(niche, patterns, 40);
+        const moreAvailable = await checkDomainAvailability(moreGenerated);
+        const existing = new Set(availableDomains.map(d => d.domain));
+        for (const d of moreAvailable) {
+          if (!existing.has(d.domain)) availableDomains.push(d);
+        }
+      }
+      
+      console.log(`Found ${availableDomains.length} available domains from ${generatedDomains.length} generated`);
+      
+      if (availableDomains.length === 0) {
+        return res.status(400).json({ 
+          error: 'No available domains found under $100. Try a different niche or check again later.',
+          competitors,
+          patterns,
+          totalGenerated: generatedDomains.length,
+          totalAvailable: 0
+        });
+      }
+      
+      console.log('Using AI to select best 6 domains...');
+      const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
+      
+      // Ensure minimum domains
+      if (selectedDomains.length < 6) {
+        const chosen = new Set(selectedDomains.map(d => d.domain));
+        for (const d of availableDomains) {
+          if (selectedDomains.length >= 6) break;
+          if (!chosen.has(d.domain)) selectedDomains.push(d);
+        }
+      }
+      
+      if (selectedDomains.length === 0) {
+        return res.status(400).json({ 
+          error: `No suitable domains could be selected for "${niche}".`,
+          suggestion: `Try a different niche or check again later.`
+        });
+      }
+
+      const bestDomain = selectedDomains[0];
+      const alternatives = selectedDomains.slice(1);
+
+      return res.json({
+        competitors,
+        patterns,
+        recommendation: bestDomain,
+        alternatives,
+        totalGenerated: generatedDomains.length,
+        totalAvailable: availableDomains.length,
+        source: 'database' // Indicate this came from database
+      });
+    }
+    
+    // STEP 2: If insufficient database results, use AI generation with 2-minute timeout
+    console.log(`⚡ Found ${allDatabaseResults.length} database results - need AI generation with 2-minute timeout`);
+    
+    const startTime = Date.now();
+    const twoMinuteTimeout = 2 * 60 * 1000; // 2 minutes
+    const deadlineAt = startTime + twoMinuteTimeout;
+    
+    let competitors = [...allDatabaseResults]; // Start with what we have
+    
+    // Background AI generation with timeout
+    const aiGenerationPromise = (async () => {
+      try {
+        const strict = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
+        return strict || [];
+      } catch (error) {
+        console.log('AI generation error:', error.message);
+        return [];
+      }
+    })();
+    
+    // Wait for AI results but respect 2-minute timeout
+    const timeoutPromise = new Promise(resolve => {
+      setTimeout(() => resolve([]), twoMinuteTimeout);
+    });
+    
+    const aiResults = await Promise.race([aiGenerationPromise, timeoutPromise]);
+    const elapsedTime = Date.now() - startTime;
+    
+    // Add AI results to competitors (avoiding duplicates)
+    for (const store of aiResults) {
+      if (store && store.domain) {
+        const domainKey = String(store.domain).replace(/^www\./,'').toLowerCase();
+        if (!seenDomains.has(domainKey)) {
+          competitors.push(store);
+          seenDomains.add(domainKey);
+        }
+      }
+    }
+    
+    console.log(`⏱️ AI generation completed in ${Math.round(elapsedTime/1000)}s, found ${competitors.length} total competitors`);
+    
+    // Ensure we have at least 1 store (as requested)
+    if (competitors.length === 0) {
+      const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
+      return res.status(400).json({ 
+        error: `Unable to find dropshipping competitors for "${niche}". This could be because the niche is too specific or the AI couldn't find relevant high-ticket dropshipping stores.`,
+        suggestion: `Try a broader niche term.`,
+        availableNiches
+      });
+    }
+    
+    // Continue processing in background if we hit timeout but have some results
+    if (elapsedTime >= twoMinuteTimeout && competitors.length >= 1) {
+      console.log(`🔄 Continuing AI generation in background...`);
+      // Continue the AI generation promise in background (don't await)
+      aiGenerationPromise.then(backgroundResults => {
+        console.log(`📋 Background AI generation found ${backgroundResults.length} additional competitors`);
+        // Could optionally persist these results to database for future use
+      }).catch(() => {
+        // Silent fail for background processing
+      });
     }
 
     // Persist verified competitors for brand-new niches (even if fewer than 5)
@@ -1116,17 +1208,6 @@ app.post('/api/generate-domains', async (req, res) => {
       console.warn('Failed to persist newly discovered competitors:', e && e.message ? e.message : e);
     }
 
-    const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
-    if (!competitors || competitors.length === 0) {
-      return res.status(400).json({ 
-        error: `Unable to find dropshipping competitors for "${niche}". This could be because the niche is too specific or the AI couldn't find relevant high-ticket dropshipping stores.`,
-        suggestion: `Try a broader niche term.`,
-        availableNiches
-      });
-    }
-    
-    // If we reach here and niche is not in our DB, it's acceptable to have <5; proceed
-
     // 2. Analyze domain patterns
     console.log('Analyzing domain patterns...');
     const patterns = await analyzeDomainPatterns(competitors, niche);
@@ -1137,7 +1218,6 @@ app.post('/api/generate-domains', async (req, res) => {
 
     // 3. Generate domain suggestions (40 total: 20 professional + 20 poetic) - FAST
     console.log('Generating domain suggestions...');
-    // Reduce generation count for speed
     const generatedDomains = await generateDomains(niche, patterns, 40);
     
     // 4. Check availability
@@ -1174,7 +1254,6 @@ app.post('/api/generate-domains', async (req, res) => {
     const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
     // Guarantee 1 recommendation + 5 alternatives minimum
     if (selectedDomains.length < 6) {
-      const deficit = 6 - selectedDomains.length;
       const chosen = new Set(selectedDomains.map(d => d.domain));
       for (const d of availableDomains) {
         if (selectedDomains.length >= 6) break;
@@ -1185,15 +1264,12 @@ app.post('/api/generate-domains', async (req, res) => {
     if (selectedDomains.length === 0) {
       return res.status(400).json({ 
         error: `No suitable domains could be selected for "${niche}". Generated ${generatedDomains.length} domains, ${availableDomains.length} available, but none met quality standards.`,
-        suggestion: `Try a different niche or check again later.`,
-        availableNiches: []
+        suggestion: `Try a different niche or check again later.`
       });
     }
 
     const bestDomain = selectedDomains[0];
     const alternatives = selectedDomains.slice(1);
-
-    // No cross-request caching
 
     res.json({
       competitors,
@@ -1201,10 +1277,10 @@ app.post('/api/generate-domains', async (req, res) => {
       recommendation: bestDomain,
       alternatives,
       totalGenerated: generatedDomains.length,
-      totalAvailable: availableDomains.length
+      totalAvailable: availableDomains.length,
+      source: 'ai_generated', // Indicate this used AI generation
+      processingTime: `${Math.round(elapsedTime/1000)}s`
     });
-
-    // No cache persistence
 
   } catch (error) {
     console.error('Error generating domains:', error);
