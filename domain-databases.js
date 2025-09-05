@@ -42,84 +42,84 @@ const DOMAIN_DATABASES = {
     // High-ticket physical product niche keywords (strict list used for UI display)
     strictNicheKeywords: {
         // BACKYARD NICHE
-        'backyard': ['backyard', 'yard', 'patio', 'deck', 'outdoor'],
-        'bbq': ['bbq', 'barbecue', 'grill', 'grilling', 'smoker'],
-        'fire': ['fire', 'fireplace', 'firepit', 'flame'],
-        'pool': ['pool', 'spa', 'hot', 'tub', 'swim'],
-        'garden': ['garden', 'landscape', 'lawn', 'plant'],
+        'backyard': ['backyard', 'yard', 'patio', 'deck', 'outdoor', 'garden space', 'courtyard'],
+        'bbq': ['bbq', 'barbecue', 'grill', 'grilling', 'smoker', 'charcoal', 'gas grill', 'outdoor cooking'],
+        'fire': ['fire', 'fireplace', 'firepit', 'flame', 'bonfire', 'outdoor heater'],
+        'pool': ['pool', 'spa', 'hot tub', 'swim', 'swimming pool', 'jacuzzi', 'backyard oasis'],
+        'garden': ['garden', 'landscape', 'lawn', 'plant', 'vegetable patch', 'flower bed', 'shrubs', 'soil'],
 
         // SMART HOME NICHE
-        'smart': ['smart', 'automated', 'connected', 'intelligent'],
-        'home': ['home', 'house', 'residence', 'domestic'],
-        'security': ['security', 'camera', 'alarm', 'monitoring'],
-        'lighting': ['lighting', 'lights', 'led', 'illumination'],
-        'climate': ['climate', 'thermostat', 'heating', 'cooling'],
+        'smart': ['smart', 'automated', 'connected', 'intelligent', 'AI-driven', 'IoT-enabled'],
+        'home': ['home', 'house', 'residence', 'domestic', 'homestead', 'apartment'],
+        'security': ['security', 'camera', 'alarm', 'monitoring', 'smart lock', 'doorbell camera', 'CCTV'],
+        'lighting': ['lighting', 'lights', 'led', 'illumination', 'smart bulbs', 'dimmers', 'mood lighting'],
+        'climate': ['climate', 'thermostat', 'heating', 'cooling', 'HVAC', 'air conditioning', 'smart thermostat'],
 
         // YARD EQUIPMENT NICHE  
-        'yard': ['yard', 'lawn', 'garden', 'landscape'],
-        'mower': ['mower', 'mowing', 'cutting', 'trimmer'],
-        'equipment': ['equipment', 'tools', 'machinery', 'gear'],
-        'maintenance': ['maintenance', 'care', 'upkeep'],
+        'yard': ['yard', 'lawn', 'garden', 'landscape', 'outdoor space', 'backlot'],
+        'mower': ['mower', 'mowing', 'cutting', 'trimmer', 'lawnmower', 'weed whacker', 'edger'],
+        'equipment': ['equipment', 'tools', 'machinery', 'gear', 'hardware'],
+        'maintenance': ['maintenance', 'care', 'upkeep', 'repair', 'seasonal care'],
 
         // WELLNESS NICHE
-        'wellness': ['wellness', 'health', 'wellbeing', 'recovery'],
-        'massage': ['massage', 'therapy', 'relaxation', 'spa'],
-        'sauna': ['sauna', 'steam', 'infrared', 'heat'],
-        'meditation': ['meditation', 'mindfulness', 'zen', 'calm'],
+        'wellness': ['wellness', 'health', 'wellbeing', 'recovery', 'self-care', 'holistic'],
+        'massage': ['massage', 'therapy', 'relaxation', 'spa', 'deep tissue', 'aromatherapy'],
+        'sauna': ['sauna', 'steam', 'infrared', 'heat', 'sweat therapy', 'detox'],
+        'meditation': ['meditation', 'mindfulness', 'zen', 'calm', 'breathing', 'focus', 'guided meditation'],
 
         // FITNESS NICHE
-        'fitness': ['fitness', 'gym', 'workout', 'exercise'],
-        'strength': ['strength', 'weight', 'power', 'muscle'],
-        'cardio': ['cardio', 'running', 'cycling', 'endurance'],
-        'machine': ['machine', 'gear', 'apparatus'],
+        'fitness': ['fitness', 'gym', 'workout', 'exercise', 'training', 'HIIT', 'bodyweight'],
+        'strength': ['strength', 'weight', 'power', 'muscle', 'resistance', 'lifting', 'barbell'],
+        'cardio': ['cardio', 'running', 'cycling', 'endurance', 'rowing', 'aerobics', 'jump rope'],
+        'equipment': ['equipment', 'machine', 'gear', 'apparatus', 'dumbbells', 'treadmill'],
 
         // GARAGE NICHE
-        'garage': ['garage', 'workshop', 'storage', 'workspace'],
-        'tool': ['tool', 'tools', 'equipment', 'machinery'],
-        'automotive': ['automotive', 'car', 'vehicle', 'auto'],
-        'organization': ['organization', 'storage', 'cabinet', 'rack'],
+        'garage': ['garage', 'workshop', 'storage', 'workspace', 'shed', 'man cave'],
+        'tool': ['tool', 'tools', 'equipment', 'machinery', 'power tools', 'hand tools'],
+        'automotive': ['automotive', 'car', 'vehicle', 'auto', 'mechanic', 'engine', 'tuning'],
+        'organization': ['organization', 'storage', 'cabinet', 'rack', 'shelving', 'toolbox'],
 
         // OUTDOOR/ADVENTURE NICHE
-        'outdoor': ['outdoor', 'adventure', 'camping', 'hiking'],
-        'gear': ['gear', 'equipment', 'tools', 'apparatus'],
-        'survival': ['survival', 'tactical', 'emergency', 'prep'],
-        'recreation': ['recreation', 'activity', 'sport', 'leisure'],
+        'outdoor': ['outdoor', 'adventure', 'camping', 'hiking', 'trekking', 'nature', 'expedition'],
+        'gear': ['gear', 'equipment', 'tools', 'apparatus', 'backpack', 'tent', 'sleeping bag'],
+        'survival': ['survival', 'tactical', 'emergency', 'prep', 'bushcraft', 'first aid'],
+        'recreation': ['recreation', 'activity', 'sport', 'leisure', 'kayaking', 'climbing', 'exploration'],
 
         // MARINE NICHE
-        'marine': ['marine', 'boat', 'yacht', 'vessel'],
-        'water': ['water', 'ocean', 'sea', 'lake'],
-        'fishing': ['fishing', 'angling', 'catch', 'tackle'],
-        'navigation': ['navigation', 'gps', 'compass', 'chart'],
+        'marine': ['marine', 'boat', 'yacht', 'vessel', 'sailing', 'nautical'],
+        'water': ['water', 'ocean', 'sea', 'lake', 'river', 'waves', 'coastal'],
+        'fishing': ['fishing', 'angling', 'catch', 'tackle', 'fly fishing', 'rod', 'bait'],
+        'navigation': ['navigation', 'gps', 'compass', 'chart', 'sonar', 'radar'],
 
         // HORSE RIDING NICHE
-        'horse': ['horse', 'equine', 'equestrian', 'riding'],
-        'riding': ['riding', 'saddle', 'bridle', 'tack'],
-        'stable': ['stable', 'barn', 'arena', 'paddock'],
-        'training': ['training', 'dressage', 'jumping', 'competition'],
+        'horse': ['horse', 'equine', 'equestrian', 'riding', 'pony'],
+        'riding': ['riding', 'saddle', 'bridle', 'tack', 'jodhpurs', 'reins'],
+        'stable': ['stable', 'barn', 'arena', 'paddock', 'stall', 'hayloft'],
+        'training': ['training', 'dressage', 'jumping', 'competition', 'horsemanship', 'eventing'],
 
         // HOME AND LIVING NICHE
-        'living': ['living', 'interior', 'design', 'decor'],
-        'furniture': ['furniture', 'seating', 'table', 'storage'],
-        'comfort': ['comfort', 'luxury', 'premium', 'quality'],
-        'space': ['space', 'room', 'area', 'environment'],
+        'living': ['living', 'interior', 'design', 'decor', 'aesthetics', 'home styling'],
+        'furniture': ['furniture', 'seating', 'table', 'storage', 'sofa', 'cabinet', 'wardrobe'],
+        'comfort': ['comfort', 'luxury', 'premium', 'quality', 'cozy', 'ergonomic'],
+        'space': ['space', 'room', 'area', 'environment', 'floor plan', 'open concept'],
 
         // BIOHACKING NICHE
-        'biohacking': ['biohacking', 'optimization', 'enhancement', 'performance'],
-        'recovery': ['recovery', 'regeneration', 'restoration', 'healing'],
-        'monitoring': ['monitoring', 'tracking', 'measurement', 'data'],
-        'enhancement': ['enhancement', 'improvement', 'upgrade', 'boost'],
+        'biohacking': ['biohacking', 'optimization', 'enhancement', 'performance', 'longevity', 'nootropics'],
+        'recovery': ['recovery', 'regeneration', 'restoration', 'healing', 'rehab', 'muscle repair'],
+        'monitoring': ['monitoring', 'tracking', 'measurement', 'data', 'wearables', 'biometrics'],
+        'enhancement': ['enhancement', 'improvement', 'upgrade', 'boost', 'neuro-enhancement', 'supplements'],
 
         // E-VEHICLE NICHE
-        'electric': ['electric', 'ev', 'battery', 'powered'],
-        'vehicle': ['vehicle', 'car', 'bike', 'scooter'],
-        'charging': ['charging', 'charger', 'station', 'power'],
-        'mobility': ['mobility', 'transport', 'travel', 'commute'],
+        'electric': ['electric', 'ev', 'battery', 'powered', 'plug-in', 'zero emission'],
+        'vehicle': ['vehicle', 'car', 'bike', 'scooter', 'truck', 'e-mobility'],
+        'charging': ['charging', 'charger', 'station', 'power', 'fast charging', 'supercharger'],
+        'mobility': ['mobility', 'transport', 'travel', 'commute', 'rideshare', 'urban mobility'],
 
         // KITCHEN APPLIANCES NICHE
-        'kitchen': ['kitchen', 'culinary', 'cooking', 'chef'],
-        'appliance': ['appliance', 'equipment', 'machine', 'device'],
-        'cooking': ['cooking', 'baking', 'roasting', 'preparation'],
-        'professional': ['professional', 'commercial', 'grade', 'quality']
+        'kitchen': ['kitchen', 'culinary', 'cooking', 'chef', 'cookware', 'kitchenware'],
+        'appliance': ['appliance', 'equipment', 'machine', 'device', 'gadget'],
+        'cooking': ['cooking', 'baking', 'roasting', 'preparation', 'grilling', 'frying', 'slow cooking'],
+        'professional': ['professional', 'commercial', 'grade', 'quality', 'restaurant', 'industrial']
     },
 
     // High-Ticket Niche Terms (products $1000+)
