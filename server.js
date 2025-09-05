@@ -1023,6 +1023,22 @@ app.post('/api/generate-domains', async (req, res) => {
       const key = String(s && s.domain || '').replace(/^www\./,'').toLowerCase();
       return !(competitorFinder.excludedRetailers && competitorFinder.excludedRetailers.has(key));
     });
+    // Also include direct known stores for the canonical niche key to ensure curated niches return 5+
+    try {
+      const normalizedDirect = typeof competitorFinder.normalizeNiche === 'function' 
+        ? competitorFinder.normalizeNiche(niche) 
+        : String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
+      const directKnown = (competitorFinder.knownStores && competitorFinder.knownStores[normalizedDirect]) || [];
+      for (const s of directKnown) {
+        if (!s || !s.domain) continue;
+        const k = String(s.domain).replace(/^www\./,'').toLowerCase();
+        const excluded = competitorFinder.excludedRetailers && competitorFinder.excludedRetailers.has(k);
+        if (excluded) continue;
+        if (!knownStores.find(x => String(x.domain||'').replace(/^www\./,'').toLowerCase() === k)) {
+          knownStores.push(s);
+        }
+      }
+    } catch (_) {}
     
     // Combine database results (curated + known stores)
     const allDatabaseResults = [];
@@ -1041,25 +1057,13 @@ app.post('/api/generate-domains', async (req, res) => {
       }
     }
     
-    // Add known stores (pre-verified, just check relevance without verification)
+    // Add known stores without filtering to ensure we keep curated lists intact
     for (const store of knownStores) {
-      if (store && store.domain) {
-        const domainKey = String(store.domain).replace(/^www\./,'').toLowerCase();
-        if (!seenDomains.has(domainKey)) {
-          try {
-            // Only check relevance, skip verification (as requested)
-            const relevant = await competitorFinder.isRelevantToNiche(store, niche, { checkContent: false });
-            if (relevant) {
-              allDatabaseResults.push(store);
-              seenDomains.add(domainKey);
-            }
-          } catch (_) {
-            // If relevance check fails, still include it (better to have results)
-            allDatabaseResults.push(store);
-            seenDomains.add(domainKey);
-          }
-        }
-      }
+      if (!store || !store.domain) continue;
+      const domainKey = String(store.domain).replace(/^www\./,'').toLowerCase();
+      if (seenDomains.has(domainKey)) continue;
+      allDatabaseResults.push(store);
+      seenDomains.add(domainKey);
     }
     
     // If we have 5+ database results, return immediately (no AI processing needed)
