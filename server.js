@@ -617,7 +617,7 @@ async function extractNicheKeywords(niche) {
 }
 
 // Generate domain suggestions - OPTIMIZED for speed
-async function generateDomains(niche, patterns, count = 40) {
+async function generateDomains(niche, patterns, count = 20) {
   console.log(`🎯 Generating ${count} domains for high-ticket ${niche} niche...`);
   
   const nicheKeywords = patterns.nicheKeywords || [];
@@ -630,10 +630,10 @@ async function generateDomains(niche, patterns, count = 40) {
   const poeticDescriptors = DOMAIN_DATABASES.poeticDescriptors[normalizedNiche] || 
                            DOMAIN_DATABASES.poeticDescriptors[niche.toLowerCase()] || [];
 
-  // Generate fewer domains for speed: 20 professional + 20 poetic = 40 total
-  const professionalDomains = await generateProfessionalDomains(niche, nicheTermsFromDB, nicheKeywords, industryTerms, 20);
+  // Generate fewer domains for speed: 10 professional + 10 poetic = 20 total
+  const professionalDomains = await generateProfessionalDomains(niche, nicheTermsFromDB, nicheKeywords, industryTerms, 10);
   
-  const poeticDomains = await generatePoeticDomains(niche, nicheTermsFromDB, poeticDescriptors, 20);
+  const poeticDomains = await generatePoeticDomains(niche, nicheTermsFromDB, poeticDescriptors, 10);
   
   // Filter out domains that use the exact niche term – enforce broader keywords
   const allRaw = [...professionalDomains, ...poeticDomains];
@@ -660,8 +660,8 @@ async function generateDomains(niche, patterns, count = 40) {
   // If we filtered out too many, generate more to compensate
   if (validDomains.length < count * 0.7) {
     console.log(`⚠️  Need more domains with complete words. Generating additional domains...`);
-    const additionalProfessional = await generateProfessionalDomains(niche, nicheTermsFromDB, nicheKeywords, industryTerms, 10);
-    const additionalPoetic = await generatePoeticDomains(niche, nicheTermsFromDB, poeticDescriptors, 10);
+    const additionalProfessional = await generateProfessionalDomains(niche, nicheTermsFromDB, nicheKeywords, industryTerms, 5);
+    const additionalPoetic = await generatePoeticDomains(niche, nicheTermsFromDB, poeticDescriptors, 5);
     const additionalValid = [...additionalProfessional, ...additionalPoetic].filter(domain => hasCompleteWords(domain));
     validDomains.push(...additionalValid);
     console.log(`📈 Added ${additionalValid.length} more domains with complete words`);
@@ -1291,7 +1291,7 @@ app.post('/api/generate-domains', async (req, res) => {
       }
 
       console.log('Generating domain suggestions...');
-      const generatedDomains = await generateDomains(niche, patterns, 40);
+      const generatedDomains = await generateDomains(niche, patterns, 20);
       
       console.log('Checking domain availability...');
       let availableDomains = await checkDomainAvailability(generatedDomains);
@@ -1306,7 +1306,7 @@ app.post('/api/generate-domains', async (req, res) => {
     while (availableDomains.length < 6 && attempts < maxAttempts) {
       attempts++;
       console.log(`🎯 MUST have 6 domains! Currently have ${availableDomains.length}. Generating more (attempt ${attempts}/${maxAttempts})...`);
-      const moreGenerated = await generateDomains(niche, patterns, 50); // Generate more per attempt
+      const moreGenerated = await generateDomains(niche, patterns, 25); // Generate more per attempt
       const moreAvailable = await checkDomainAvailability(moreGenerated);
       const existing = new Set(availableDomains.map(d => d.domain));
       for (const d of moreAvailable) {
@@ -1474,7 +1474,7 @@ app.post('/api/generate-domains', async (req, res) => {
         return res.status(500).json({ error: 'Failed to analyze domain patterns' });
       }
       console.log('Generating domain suggestions...');
-      const generatedDomains = await generateDomains(niche, patterns, 40);
+      const generatedDomains = await generateDomains(niche, patterns, 20);
       console.log('Checking domain availability...');
       let availableDomains = await checkDomainAvailability(generatedDomains);
       if (availableDomains.length === 0 && !namecomAPI) {
@@ -1602,7 +1602,7 @@ app.post('/api/generate-domains', async (req, res) => {
 
     // 3. Generate domain suggestions (40 total: 20 professional + 20 poetic) - FAST
     console.log('Generating domain suggestions...');
-    const generatedDomains = await generateDomains(niche, patterns, 40);
+    const generatedDomains = await generateDomains(niche, patterns, 20);
     
     // 4. Check availability
     console.log('Checking domain availability...');
@@ -1613,7 +1613,7 @@ app.post('/api/generate-domains', async (req, res) => {
     while (availableDomains.length < 6 && attempts < maxAttempts) {
       attempts++;
       console.log(`🎯 MUST have 6 domains! Currently have ${availableDomains.length}. Generating more (attempt ${attempts}/${maxAttempts})...`);
-      const moreGenerated = await generateDomains(niche, patterns, 50); // Generate more per attempt
+      const moreGenerated = await generateDomains(niche, patterns, 25); // Generate more per attempt
       const moreAvailable = await checkDomainAvailability(moreGenerated);
       // Merge unique by domain
       const existing = new Set(availableDomains.map(d => d.domain));
@@ -1750,7 +1750,7 @@ app.post('/api/generate-more', async (req, res) => {
       console.log(`🔄 Attempt ${attempts} to generate more domains...`);
       
       // Generate more domains (increase count with each attempt)
-      const generateCount = 30 + (attempts * 10);
+      const generateCount = 15 + (attempts * 5);
       let patterns;
       
       // Basic patterns (no cache)
@@ -1796,7 +1796,7 @@ app.post('/api/generate-more', async (req, res) => {
     while (finalDomains.length < 6 && extraAttempts < 3) {
       extraAttempts++;
       console.log(`🎯 Need ${6 - finalDomains.length} more domains. Extra attempt ${extraAttempts}/3...`);
-      const more = await generateDomains(niche, patterns, 60);
+      const more = await generateDomains(niche, patterns, 30);
       const moreAvail = await checkDomainAvailability(more);
       const used = new Set([...excludeDomains, ...finalDomains.map(d => d.domain)]);
       for (const d of moreAvail) {
