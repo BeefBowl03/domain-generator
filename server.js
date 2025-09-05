@@ -919,9 +919,10 @@ async function checkDomainAvailability(domains) {
       console.log(`Checking availability for ${domains.length} domains...`);
       const results = await namecomAPI.checkMultipleDomains(domains);
       
-      // Filter for available domains under $100
+      // Accept ONLY real API prices (exclude any simulated fallbacks)
       return results
-        .filter(result => result.available && result.price && result.price < 100)
+        .filter(result => result && result.available && result.price != null && !result.fallback)
+        .filter(result => result.price < 100) // keep sub-$100 only per product requirements
         .map(result => ({
           domain: result.domain,
           available: true,
@@ -1215,23 +1216,31 @@ app.post('/api/generate-domains', async (req, res) => {
     console.log(`🔍 Searching for competitors for niche: ${niche}`);
 
     const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
+    const canonicalNiche = (function() {
+      try {
+        if (competitorFinder && typeof competitorFinder.mapToClosestKnownNiche === 'function') {
+          return competitorFinder.mapToClosestKnownNiche(normalizedNiche);
+        }
+      } catch (_) {}
+      return normalizedNiche;
+    })();
     
     // STEP 1: Check database first for similar/related niches - RETURN IMMEDIATELY if found
     console.log(`📊 Checking database for existing competitors...`);
     
-    // Check exact niche first
-    const curated = await fetchCuratedStores(niche);
+    // Check exact niche first (mapped to canonical niche)
+    const curated = await fetchCuratedStores(canonicalNiche);
 
     // Check similar/related niches using known stores wide search
-    const knownStores = (competitorFinder.getKnownStoresWide(niche) || []).filter(s => {
+    const knownStores = (competitorFinder.getKnownStoresWide(canonicalNiche) || []).filter(s => {
       const key = String(s && s.domain || '').replace(/^www\./,'').toLowerCase();
       return !(competitorFinder.excludedRetailers && competitorFinder.excludedRetailers.has(key));
     });
     // Also include direct known stores for the canonical niche key to ensure curated niches return 5+
     try {
       const normalizedDirect = typeof competitorFinder.normalizeNiche === 'function' 
-        ? competitorFinder.normalizeNiche(niche) 
-        : String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
+        ? competitorFinder.normalizeNiche(canonicalNiche) 
+        : String(canonicalNiche || '').toLowerCase().trim().replace(/\s+/g, ' ');
       const directKnown = (competitorFinder.knownStores && competitorFinder.knownStores[normalizedDirect]) || [];
       for (const s of directKnown) {
         if (!s || !s.domain) continue;
@@ -1277,13 +1286,13 @@ app.post('/api/generate-domains', async (req, res) => {
       
       // Continue with domain generation using database results
       console.log('Analyzing domain patterns...');
-      const patternsRaw = await analyzeDomainPatterns(competitors, niche);
-      const canonical = String(niche || '').toLowerCase().trim().replace(/\s+/g,' ');
+      const patternsRaw = await analyzeDomainPatterns(competitors, canonicalNiche);
+      const canonical = String(canonicalNiche || '').toLowerCase().trim().replace(/\s+/g,' ');
       const normalized = competitorFinder && typeof competitorFinder.normalizeNiche === 'function' ? competitorFinder.normalizeNiche(canonical) : canonical;
       const strict = DOMAIN_DATABASES.strictNicheKeywords && (DOMAIN_DATABASES.strictNicheKeywords[normalized] || DOMAIN_DATABASES.strictNicheKeywords[canonical]);
       const patterns = {
         ...patternsRaw,
-        nicheKeywords: strict ? strict : removePrefixesAndSuffixesFromKeywords(niche, patternsRaw && patternsRaw.nicheKeywords)
+        nicheKeywords: strict ? strict : removePrefixesAndSuffixesFromKeywords(canonicalNiche, patternsRaw && patternsRaw.nicheKeywords)
       };
       
       if (!patterns) {
@@ -1291,7 +1300,7 @@ app.post('/api/generate-domains', async (req, res) => {
       }
 
       console.log('Generating domain suggestions...');
-      const generatedDomains = await generateDomains(niche, patterns, 20);
+      const generatedDomains = await generateDomains(canonicalNiche, patterns, 20);
       
       console.log('Checking domain availability...');
       let availableDomains = await checkDomainAvailability(generatedDomains);
@@ -1306,7 +1315,7 @@ app.post('/api/generate-domains', async (req, res) => {
     while (availableDomains.length < 6 && attempts < maxAttempts) {
       attempts++;
       console.log(`🎯 MUST have 6 domains! Currently have ${availableDomains.length}. Generating more (attempt ${attempts}/${maxAttempts})...`);
-      const moreGenerated = await generateDomains(niche, patterns, 25); // Generate more per attempt
+      const moreGenerated = await generateDomains(canonicalNiche, patterns, 25); // Generate more per attempt
       const moreAvailable = await checkDomainAvailability(moreGenerated);
       const existing = new Set(availableDomains.map(d => d.domain));
       for (const d of moreAvailable) {
@@ -1345,7 +1354,7 @@ app.post('/api/generate-domains', async (req, res) => {
       }
       
       console.log('Using AI to select best 6 domains...');
-      const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
+      const selectedDomains = await selectBestDomainsWithAI(availableDomains, canonicalNiche, patterns);
       
       // GUARANTEE exactly 6 domains - this is mandatory
       if (selectedDomains.length < 6) {
@@ -1391,7 +1400,7 @@ app.post('/api/generate-domains', async (req, res) => {
       if (competitors.length < 5) {
         try {
           const deadlineAt = Date.now() + 12000; // ~12s budget for serverless
-          const aiFast = await competitorFinder.getVerifiedCompetitors(niche, { fast: true, deadlineAt, maxAttempts: 1 });
+          const aiFast = await competitorFinder.getVerifiedCompetitors(canonicalNiche, { fast: true, deadlineAt, maxAttempts: 1 });
           const seen = new Set(competitors.map(c => String(c.domain || '').replace(/^www\./,'').toLowerCase()));
           for (const s of (aiFast || [])) {
             const k = String(s.domain || '').replace(/^www\./,'').toLowerCase();
@@ -1410,7 +1419,7 @@ app.post('/api/generate-domains', async (req, res) => {
         // Build known set for trustedKnown flag
         const knownSet = new Set();
         try {
-          const knownWide = competitorFinder.getKnownStoresWide(niche) || [];
+          const knownWide = competitorFinder.getKnownStoresWide(canonicalNiche) || [];
           const knownGlobal = competitorFinder.getKnownStoresGlobal() || [];
           for (const s of [...knownWide, ...knownGlobal]) {
             if (!s || !s.domain) continue;
@@ -1431,7 +1440,7 @@ app.post('/api/generate-domains', async (req, res) => {
                 const key = String(c.domain || '').replace(/^www\./,'').toLowerCase();
                 const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: knownSet.has(key) });
                 if (!qualifies) return;
-                const relevant = await competitorFinder.isRelevantToNiche(c, niche, { checkContent: false });
+                const relevant = await competitorFinder.isRelevantToNiche(c, canonicalNiche, { checkContent: false });
                 if (!relevant) return;
                 verified.push(c);
               } catch (_) {}
@@ -1462,19 +1471,19 @@ app.post('/api/generate-domains', async (req, res) => {
       }
 
       console.log('Analyzing domain patterns...');
-      const patternsRaw = await analyzeDomainPatterns(competitors, niche);
-      const canonical = String(niche || '').toLowerCase().trim().replace(/\s+/g,' ');
+      const patternsRaw = await analyzeDomainPatterns(competitors, canonicalNiche);
+      const canonical = String(canonicalNiche || '').toLowerCase().trim().replace(/\s+/g,' ');
       const normalized = competitorFinder && typeof competitorFinder.normalizeNiche === 'function' ? competitorFinder.normalizeNiche(canonical) : canonical;
       const strict = DOMAIN_DATABASES.strictNicheKeywords && (DOMAIN_DATABASES.strictNicheKeywords[normalized] || DOMAIN_DATABASES.strictNicheKeywords[canonical]);
       const patterns = {
         ...patternsRaw,
-        nicheKeywords: strict ? strict : removePrefixesAndSuffixesFromKeywords(niche, patternsRaw && patternsRaw.nicheKeywords)
+        nicheKeywords: strict ? strict : removePrefixesAndSuffixesFromKeywords(canonicalNiche, patternsRaw && patternsRaw.nicheKeywords)
       };
       if (!patterns) {
         return res.status(500).json({ error: 'Failed to analyze domain patterns' });
       }
       console.log('Generating domain suggestions...');
-      const generatedDomains = await generateDomains(niche, patterns, 20);
+      const generatedDomains = await generateDomains(canonicalNiche, patterns, 20);
       console.log('Checking domain availability...');
       let availableDomains = await checkDomainAvailability(generatedDomains);
       if (availableDomains.length === 0 && !namecomAPI) {
@@ -1491,7 +1500,7 @@ app.post('/api/generate-domains', async (req, res) => {
         });
       }
       console.log('Using AI to select best 6 domains...');
-      const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
+      const selectedDomains = await selectBestDomainsWithAI(availableDomains, canonicalNiche, patterns);
       if (selectedDomains.length < 6) {
         const chosen = new Set(selectedDomains.map(d => d.domain));
         for (const d of availableDomains) {
@@ -1524,7 +1533,7 @@ app.post('/api/generate-domains', async (req, res) => {
     // Background AI generation with timeout
     const aiGenerationPromise = (async () => {
       try {
-        const strict = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
+        const strict = await competitorFinder.getVerifiedCompetitors(canonicalNiche, { fast: false, deadlineAt });
         return strict || [];
       } catch (error) {
         console.log('AI generation error:', error.message);
@@ -1587,13 +1596,13 @@ app.post('/api/generate-domains', async (req, res) => {
 
     // 2. Analyze domain patterns
     console.log('Analyzing domain patterns...');
-    const patternsRaw = await analyzeDomainPatterns(competitors, niche);
+    const patternsRaw = await analyzeDomainPatterns(competitors, canonicalNiche);
     // Override niche keywords using strict database where available; otherwise, clean
-    const canonical = String(niche || '').toLowerCase().trim().replace(/\s+/g,' ');
+    const canonical = String(canonicalNiche || '').toLowerCase().trim().replace(/\s+/g,' ');
     const strict = (DOMAIN_DATABASES.strictNicheKeywords && (DOMAIN_DATABASES.strictNicheKeywords[canonical] || DOMAIN_DATABASES.strictNicheKeywords[competitorFinder && competitorFinder.normalizeNiche ? competitorFinder.normalizeNiche(canonical) : canonical])) || null;
     const patterns = {
       ...patternsRaw,
-      nicheKeywords: strict ? strict : removePrefixesAndSuffixesFromKeywords(niche, patternsRaw && patternsRaw.nicheKeywords)
+      nicheKeywords: strict ? strict : removePrefixesAndSuffixesFromKeywords(canonicalNiche, patternsRaw && patternsRaw.nicheKeywords)
     };
     
     if (!patterns) {
@@ -1602,7 +1611,7 @@ app.post('/api/generate-domains', async (req, res) => {
 
     // 3. Generate domain suggestions (40 total: 20 professional + 20 poetic) - FAST
     console.log('Generating domain suggestions...');
-    const generatedDomains = await generateDomains(niche, patterns, 20);
+    const generatedDomains = await generateDomains(canonicalNiche, patterns, 20);
     
     // 4. Check availability
     console.log('Checking domain availability...');
@@ -1613,7 +1622,7 @@ app.post('/api/generate-domains', async (req, res) => {
     while (availableDomains.length < 6 && attempts < maxAttempts) {
       attempts++;
       console.log(`🎯 MUST have 6 domains! Currently have ${availableDomains.length}. Generating more (attempt ${attempts}/${maxAttempts})...`);
-      const moreGenerated = await generateDomains(niche, patterns, 25); // Generate more per attempt
+      const moreGenerated = await generateDomains(canonicalNiche, patterns, 25); // Generate more per attempt
       const moreAvailable = await checkDomainAvailability(moreGenerated);
       // Merge unique by domain
       const existing = new Set(availableDomains.map(d => d.domain));
@@ -1653,7 +1662,7 @@ app.post('/api/generate-domains', async (req, res) => {
     
     // 5. Use ChatGPT to select the best 6 domains from available ones
     console.log('Using AI to select best 6 domains...');
-    const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
+    const selectedDomains = await selectBestDomainsWithAI(availableDomains, canonicalNiche, patterns);
     
     // GUARANTEE exactly 6 domains - this is mandatory
     if (selectedDomains.length < 6) {

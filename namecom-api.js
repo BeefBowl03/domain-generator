@@ -62,8 +62,9 @@ class NameComAPI {
                     return {
                         domain,
                         available: result.purchasable || false,
-                        price: result.purchasePrice || 15,
-                        currency: result.purchaseCurrency || 'USD'
+                        price: result.purchasePrice ?? null,
+                        currency: result.purchaseCurrency || 'USD',
+                        fallback: false
                     };
                 }
             } catch (checkError) {
@@ -89,18 +90,21 @@ class NameComAPI {
                     return {
                         domain,
                         available: domainResult.purchasable || false,
-                        price: domainResult.purchasePrice || 15,
-                        currency: domainResult.purchaseCurrency || 'USD'
+                        price: domainResult.purchasePrice ?? null,
+                        currency: domainResult.purchaseCurrency || 'USD',
+                        fallback: false
                     };
                 }
             }
 
-            // If domain not found in search, it might be available
+            // If domain not found, do NOT fabricate a price
             return {
                 domain,
-                available: true,
-                price: 15,
-                currency: 'USD'
+                available: false,
+                price: null,
+                currency: 'USD',
+                fallback: true,
+                reason: 'not_found_in_search'
             };
 
         } catch (error) {

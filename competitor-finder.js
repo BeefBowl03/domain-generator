@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const OpenAI = require('openai');
+const DOMAIN_DATABASES = require('./domain-databases');
 
 class CompetitorFinder {
     constructor(openaiApiKey) {
@@ -51,6 +52,14 @@ class CompetitorFinder {
                 { name: 'Global Fitness', url: 'https://globalfitness.com', domain: 'globalfitness.com' }
             ],
             'home theater': [
+                { name: 'Projector People', url: 'https://projectorpeople.com', domain: 'projectorpeople.com' },
+                { name: '4Seating', url: 'https://4seating.com', domain: '4seating.com' },
+                { name: 'HTMarket', url: 'https://htmarket.com', domain: 'htmarket.com' },
+                { name: 'Theater Seat Store', url: 'https://theaterseatstore.com', domain: 'theaterseatstore.com' },
+                { name: 'Upscale Audio', url: 'https://upscaleaudio.com', domain: 'upscaleaudio.com' }
+            ],
+            // Map Man Cave to Home Theater storefronts as canonical stores
+            'man cave': [
                 { name: 'Projector People', url: 'https://projectorpeople.com', domain: 'projectorpeople.com' },
                 { name: '4Seating', url: 'https://4seating.com', domain: '4seating.com' },
                 { name: 'HTMarket', url: 'https://htmarket.com', domain: 'htmarket.com' },
@@ -161,13 +170,154 @@ class CompetitorFinder {
         // Map common no-space/alias variations to canonical niches
         const aliases = {
             'horseriding': 'horse riding',
-            'hometheater': 'home theater',
+            'hometheater': 'man cave',
+            'hometheatre': 'man cave',
+            'home theater': 'man cave',
+            'home theatre': 'man cave',
             'pizzaoven': 'pizza oven',
             'exerciseequipment': 'exercise equipment',
             'smarthome': 'smart home',
             'homegym': 'fitness'
         };
         return aliases[n.replace(/\s+/g, '')] || n;
+    }
+
+    // Map any input niche to the closest known niche we have stores for
+    mapToClosestKnownNiche(niche) {
+        const input = this.normalizeNiche(niche);
+        // 1) Direct known
+        if (this.knownStores[input]) return input;
+
+        // 2) Hard-coded synonym routing for common cases
+        const hardMap = {
+            'automotive': 'garage',
+            'auto': 'garage',
+            'cars': 'garage',
+            'car': 'garage',
+            'vehicles': 'garage',
+            'vehicle': 'garage',
+            'ev': 'garage',
+            'charging': 'garage',
+            'mancave': 'man cave',
+            'man cave': 'man cave',
+            'home theater': 'man cave',
+            'home theatre': 'man cave'
+        };
+        if (hardMap[input]) return hardMap[input];
+
+        // 3) Check against DOMAIN_DATABASES.popularNiches synonyms
+        try {
+            const popular = DOMAIN_DATABASES && DOMAIN_DATABASES.popularNiches ? DOMAIN_DATABASES.popularNiches : {};
+            const keys = Object.keys(popular);
+            const lowerInput = String(input || '').toLowerCase();
+            for (const key of keys) {
+                const item = popular[key] || {};
+                const synonyms = Array.isArray(item.synonyms) ? item.synonyms : [];
+                const candidates = [key, ...(synonyms || [])].map(s => String(s || '').toLowerCase().trim());
+                if (candidates.includes(lowerInput)) {
+                    if (this.knownStores[key]) return key;
+                }
+            }
+        } catch (_) {}
+
+        // 4) Fuzzy contains match over knownStores keys
+        const keys = Object.keys(this.knownStores || {});
+        for (const key of keys) {
+            if (input.includes(key) || key.includes(input)) return key;
+        }
+
+        // 5) Final cluster heuristics
+        if (/(garage|auto|car|vehicle|ev|charge)/i.test(input)) return 'garage';
+        if (/(garden|yard|patio|backyard|deck|landscape)/i.test(input)) return 'backyard';
+        if (/(sauna|wellness|massage|meditation|recovery)/i.test(input)) return 'wellness';
+        if (/(fitness|gym|exercise|strength|cardio)/i.test(input)) return 'fitness';
+        if (/(kitchen|appliance|cooking|chef)/i.test(input)) return 'kitchen';
+        if (/(projector|theater|theatre|seating|man\s*cave)/i.test(input)) return 'man cave';
+
+        // 6) Fuzzy-best match across all known niches and their synonyms
+        const best = this.bestMatchKnownNiche(input);
+        if (best) return best;
+
+        // Final safeguard: map to backyard cluster to avoid inventing categories
+        return 'backyard';
+    }
+
+    // Compute Levenshtein distance between two strings
+    levenshtein(a, b) {
+        const s = String(a || '');
+        const t = String(b || '');
+        const m = s.length; const n = t.length;
+        if (m === 0) return n; if (n === 0) return m;
+        const dp = new Array(n + 1);
+        for (let j = 0; j <= n; j++) dp[j] = j;
+        for (let i = 1; i <= m; i++) {
+            let prev = dp[0];
+            dp[0] = i;
+            for (let j = 1; j <= n; j++) {
+                const temp = dp[j];
+                const cost = s[i - 1] === t[j - 1] ? 0 : 1;
+                dp[j] = Math.min(
+                    dp[j] + 1,          // deletion
+                    dp[j - 1] + 1,      // insertion
+                    prev + cost          // substitution
+                );
+                prev = temp;
+            }
+        }
+        return dp[n];
+    }
+
+    // Build best match against known niches (includes synonyms) using hybrid similarity
+    bestMatchKnownNiche(niche) {
+        try {
+            const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+            const input = norm(niche);
+
+            const candidates = [];
+            const keys = Object.keys(this.knownStores || {});
+            for (const key of keys) {
+                candidates.push({ label: key, key });
+            }
+            try {
+                const popular = DOMAIN_DATABASES && DOMAIN_DATABASES.popularNiches ? DOMAIN_DATABASES.popularNiches : {};
+                for (const key of Object.keys(popular)) {
+                    if (!this.knownStores[key]) continue; // only map to niches we actually have stores for
+                    const syns = Array.isArray(popular[key].synonyms) ? popular[key].synonyms : [];
+                    for (const s of syns) {
+                        candidates.push({ label: String(s || ''), key });
+                    }
+                }
+            } catch (_) {}
+
+            if (candidates.length === 0) return null;
+
+            // Tokenize for Jaccard similarity
+            const tokens = (s) => new Set(norm(s).split(' ').filter(Boolean));
+            const inputTokens = tokens(input);
+            const jaccard = (aSet, bSet) => {
+                let inter = 0; let union = new Set([...aSet, ...bSet]).size;
+                for (const a of aSet) if (bSet.has(a)) inter++;
+                return union === 0 ? 0 : inter / union;
+            };
+
+            let bestKey = null; let bestScore = -1;
+            for (const cand of candidates) {
+                const candStr = norm(cand.label).replace(/\s+/g, '');
+                const inputStr = input.replace(/\s+/g, '');
+                const dist = this.levenshtein(inputStr, candStr);
+                const maxLen = Math.max(inputStr.length, candStr.length) || 1;
+                const levSim = 1 - (dist / maxLen);
+                const jacSim = jaccard(inputTokens, tokens(cand.label));
+                const score = (0.7 * levSim) + (0.3 * jacSim);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestKey = cand.key;
+                }
+            }
+            return bestKey || null;
+        } catch (_) {
+            return null;
+        }
     }
 
     getNicheVariations(niche) {
@@ -605,8 +755,8 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
 
     // Public: get wide known stores for niche and its variations (unique)
     getKnownStoresWide(niche) {
-        const normalized = this.normalizeNiche(niche);
-        return this.buildWideKnownCandidates(normalized);
+        const canonical = this.mapToClosestKnownNiche(niche);
+        return this.buildWideKnownCandidates(canonical);
     }
 
     // Public: get all known stores across all niches (unique)
