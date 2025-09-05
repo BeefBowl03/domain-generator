@@ -232,7 +232,7 @@ class CompetitorFinder {
         const relatedTerms = {
             'backyard': ['outdoor', 'patio', 'garden', 'yard', 'lawn', 'deck', 'landscape'],
             'pizza oven': ['outdoor oven', 'wood fired oven', 'pizza', 'oven', 'outdoor cooking', 'backyard cooking'],
-            'drone': ['uav', 'quadcopter', 'aerial', 'drone photography', 'fpv', 'rc drone'],
+            'drone': ['uav', 'quadcopter', 'aerial', 'drone photography', 'fpv', 'rc drone', 'quad', 'quads', 'multirotor'],
             'kitchen': ['culinary', 'cooking', 'chef', 'cookware', 'kitchen equipment', 'appliances'],
             'golf': ['golfing', 'golf equipment', 'golf gear', 'golf clubs', 'golf accessories'],
             'fitness': ['gym', 'workout', 'exercise', 'training', 'bodybuilding', 'strength'],
@@ -246,7 +246,10 @@ class CompetitorFinder {
             'garage': ['automotive', 'workshop', 'storage'],
             'barbecue': ['grilling', 'bbq', 'outdoor cooking'],
             'man cave': ['mancave', 'den', 'entertainment', 'game room', 'home theater', 'basement'],
-            'mancave': ['man cave', 'den', 'entertainment', 'game room', 'home theater', 'basement']
+            'mancave': ['man cave', 'den', 'entertainment', 'game room', 'home theater', 'basement'],
+            // Map common synonyms so non-DB niches find neighbors
+            'electronics': ['gadgets', 'tech', 'consumer electronics', 'smart devices', 'home electronics', 'audio video'],
+            'gadgets': ['electronics', 'tech gadgets', 'consumer electronics', 'smart devices']
         };
 
         if (relatedTerms[niche]) {

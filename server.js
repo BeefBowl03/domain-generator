@@ -186,8 +186,32 @@ async function auditCompetitorsForNiche(niche, timeLimitMs = 120000) {
     }
   }
 
+  // Final top-up: ensure at least 5 by using trusted known stores (fast verification, shallow relevance)
+  if (verified.length < 5 && Date.now() < deadlineAt) {
+    const seen = new Set(verified.map(v => String(v.domain || '').replace(/^https?:\/\//,'').replace(/^www\./,'').toLowerCase()));
+    const candidates = [
+      ...(competitorFinder.getKnownStoresWide(niche) || []),
+      ...(competitorFinder.getKnownStoresGlobal() || [])
+    ];
+    for (const c of candidates) {
+      if (verified.length >= 5 || Date.now() >= deadlineAt) break;
+      const key = String(c.domain || '').replace(/^https?:\/\//,'').replace(/^www\./,'').toLowerCase();
+      if (!key || seen.has(key)) continue;
+      try {
+        const relevant = await competitorFinder.isRelevantToNiche(c, niche, { checkContent: false });
+        if (!relevant) continue;
+        const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true });
+        if (!exists) continue;
+        const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
+        if (!qualifies) continue;
+        verified.push(c);
+        seen.add(key);
+      } catch (_) {}
+    }
+  }
+
   // Persist a stable top set (up to 10) as curated for this niche
-  const toSave = verified.slice(0, Math.max(verified.length, 5)).slice(0, 10);
+  const toSave = verified.slice(0, 10);
   if (toSave.length > 0) {
     await replaceCuratedStores(niche, toSave);
   }
@@ -991,94 +1015,71 @@ app.post('/api/generate-domains', async (req, res) => {
 
     const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
     const curated = await fetchCuratedStores(niche);
-    // Preload curated + niche-wide known stores and filter to niche relevance (shallow, no network)
-    const preloaded = [];
-    const seenPre = new Set();
-    const addTrusted = async (arr = []) => {
-      for (const s of arr) {
-        const k = (s && s.domain) ? String(s.domain).replace(/^www\./,'').toLowerCase() : null;
-        if (!k || seenPre.has(k)) continue;
-        const relevant = await competitorFinder.isRelevantToNiche(s, niche, { checkContent: false });
-        if (!relevant) continue;
-        seenPre.add(k);
-        preloaded.push(s);
-      }
-    };
-    await addTrusted(curated || []);
-    await addTrusted(competitorFinder.getKnownStoresWide(niche) || []);
-    const nicheInOurDB = (preloaded && preloaded.length > 0) || (DOMAIN_DATABASES.popularNiches && !!DOMAIN_DATABASES.popularNiches[normalizedNiche]);
-    const hasFivePreloaded = preloaded.length >= 5;
 
     let competitors = [];
 
-    // If niche is in our DB and we have 5+ curated stores, use them immediately (no verification)
-    if (nicheInOurDB && hasFivePreloaded) {
-      const seenSet = new Set();
-      for (const s of preloaded) {
-        if (competitors.length >= 5) break;
-        const k = (s.domain || '').replace(/^www\./, '').toLowerCase();
-        if (seenSet.has(k)) continue;
-        seenSet.add(k);
-        competitors.push(s);
-      }
-    }
-
-    // If we still need more, run strict search and top-up
-    if (competitors.length < 5) {
-      const strict = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
-      if (strict && strict.length) {
-        // Merge unique
-        const existing = new Set(competitors.map(c => (c.domain || '').replace(/^www\./, '').toLowerCase()));
-        for (const s of strict) {
-          if (competitors.length >= 5) break;
-          const k = (s.domain || '').replace(/^www\./, '').toLowerCase();
-          // Ensure niche relevance
+    if (Array.isArray(curated) && curated.length > 0) {
+      // If we have curated entries in SQLite for this niche, only use those (verified live + relevant)
+      const verified = [];
+      const seen = new Set();
+      await Promise.all((curated || []).map(async (s) => {
+        try {
+          const key = (s && s.domain) ? String(s.domain).replace(/^www\./,'').toLowerCase() : null;
+          if (!key || seen.has(key)) return;
+          const exists = await competitorFinder.verifyStoreExists(s, { fastVerify: true });
+          if (!exists) return;
           const relevant = await competitorFinder.isRelevantToNiche(s, niche, { checkContent: false });
-          if (!existing.has(k) && relevant) {
-            competitors.push(s);
-            existing.add(k);
-          }
-        }
+          if (!relevant) return;
+          verified.push(s);
+          seen.add(key);
+        } catch (_) {}
+      }));
+      if (verified.length > 0) {
+        competitors = verified;
+      } else {
+        // Curated exists but none verified live; fallback to strict verified search to avoid empty results
+        const strict = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
+        competitors = strict || [];
       }
+    } else {
+      // No curated entries; first try strict verified search
+      let strict = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
+      competitors = strict || [];
 
-      // If niche is in our DB, try topping up from known stores (trusted) to reach 5
-      if (nicheInOurDB && competitors.length < 5) {
-        const seen = new Set(competitors.map(c => (c.domain || '').replace(/^www\./, '').toLowerCase()));
-        const candidates = [
-          ...preloaded,
-          ...competitorFinder.getKnownStoresWide(niche),
-          ...competitorFinder.getKnownStoresGlobal()
-        ].filter(s => {
-          const k = (s.domain || '').replace(/^www\./, '').toLowerCase();
-          return !seen.has(k);
-        });
-        const tried = new Set();
-        for (const s of candidates) {
-          if (competitors.length >= 5) break;
-          const k = (s.domain || '').replace(/^www\./, '').toLowerCase();
-          if (tried.has(k)) continue; tried.add(k);
+      // If still empty, widen to known wide candidates with fast verification and shallow relevance
+      if (!competitors || competitors.length === 0) {
+        const wide = competitorFinder.getKnownStoresWide(niche) || [];
+        const verified = [];
+        const seen = new Set();
+        await Promise.all(wide.map(async (c) => {
           try {
-            const exists = await competitorFinder.verifyStoreExists(s, { fastVerify: true });
-            if (!exists) continue;
-            const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(s, { fastVerify: true, trustedKnown: true });
-            if (qualifies) {
-              competitors.push(s);
-              seen.add(k);
-            }
+            const key = String(c.domain || '').replace(/^https?:\/\//,'').replace(/^www\./,'').toLowerCase();
+            if (!key || seen.has(key)) return;
+            const relevant = await competitorFinder.isRelevantToNiche(c, niche, { checkContent: false });
+            if (!relevant) return;
+            const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true });
+            if (!exists) return;
+            const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
+            if (!qualifies) return;
+            verified.push(c);
+            seen.add(key);
           } catch (_) {}
-        }
+        }));
+        competitors = verified;
       }
     }
 
-    // Enforce 5 only when niche is in our DB; otherwise allow <5 as long as >0
-    const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
-    if (nicheInOurDB && (!competitors || competitors.length < 5)) {
-      return res.status(400).json({ 
-        error: `Unable to find 5 live, high-ticket dropshipping competitors for "${niche}" within 3 minutes.`,
-        suggestion: `Try a broader niche term or related variation.`,
-        availableNiches
-      });
+    // Persist verified competitors for brand-new niches (even if fewer than 5)
+    try {
+      const hadCurated = Array.isArray(curated) && curated.length > 0;
+      if (!hadCurated && competitors && competitors.length > 0) {
+        await replaceCuratedStores(niche, competitors.slice(0, 10));
+      }
+    } catch (e) {
+      console.warn('Failed to persist newly discovered competitors:', e && e.message ? e.message : e);
     }
+
+    const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
     if (!competitors || competitors.length === 0) {
       return res.status(400).json({ 
         error: `Unable to find dropshipping competitors for "${niche}". This could be because the niche is too specific or the AI couldn't find relevant high-ticket dropshipping stores.`,
