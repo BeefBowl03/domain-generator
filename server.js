@@ -1143,82 +1143,13 @@ app.post('/api/generate-domains', async (req, res) => {
       });
     }
     
-    // Serverless shortcut: avoid heavy AI competitor generation
-    if (isServerless) {
-      let competitors = allDatabaseResults.slice(0, 12);
-
-      // If we don't have enough from curated/known, try a fast AI fallback
-      if (competitors.length < 5) {
-        try {
-          const deadlineAt = Date.now() + 12000; // ~12s budget for serverless
-          const aiFast = await competitorFinder.getVerifiedCompetitors(niche, { fast: true, deadlineAt, maxAttempts: 1 });
-          const seen = new Set(competitors.map(c => String(c.domain || '').replace(/^www\./,'').toLowerCase()));
-          for (const s of (aiFast || [])) {
-            const k = String(s.domain || '').replace(/^www\./,'').toLowerCase();
-            if (!k || seen.has(k)) continue;
-            competitors.push(s);
-            seen.add(k);
-            if (competitors.length >= 12) break;
-          }
-        } catch (_) {}
-      }
-      if (competitors.length === 0) {
-        const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
-        return res.status(400).json({ 
-          error: `Unable to find dropshipping competitors for "${niche}" on serverless environment.`,
-          suggestion: `Try a broader niche term.`,
-          availableNiches
-        });
-      }
-      console.log('Analyzing domain patterns...');
-      const patterns = await analyzeDomainPatterns(competitors, niche);
-      if (!patterns) {
-        return res.status(500).json({ error: 'Failed to analyze domain patterns' });
-      }
-      console.log('Generating domain suggestions...');
-      const generatedDomains = await generateDomains(niche, patterns, 40);
-      console.log('Checking domain availability...');
-      let availableDomains = await checkDomainAvailability(generatedDomains);
-      if (availableDomains.length === 0) {
-        // Serverless fallback: mock a handful as available to prevent user-facing 400s
-        availableDomains = generatedDomains.slice(0, 8).map((d, i) => ({ domain: d, available: true, price: 12 + i }));
-      }
-      if (availableDomains.length === 0) {
-        return res.status(400).json({ 
-          error: 'No available domains found under $100. Try a different niche or check again later.',
-          competitors,
-          patterns,
-          totalGenerated: generatedDomains.length,
-          totalAvailable: 0
-        });
-      }
-      console.log('Using AI to select best 6 domains...');
-      const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
-      if (selectedDomains.length < 6) {
-        const chosen = new Set(selectedDomains.map(d => d.domain));
-        for (const d of availableDomains) {
-          if (selectedDomains.length >= 6) break;
-          if (!chosen.has(d.domain)) selectedDomains.push(d);
-        }
-      }
-      const bestDomain = selectedDomains[0];
-      const alternatives = selectedDomains.slice(1);
-      return res.json({
-        competitors,
-        patterns,
-        recommendation: bestDomain,
-        alternatives,
-        totalGenerated: generatedDomains.length,
-        totalAvailable: availableDomains.length,
-        source: 'database'
-      });
-    }
+    // No serverless shortcut: enforce strict 2-minute rule even on serverless
 
     // STEP 2: If insufficient database results, use AI generation with 2-minute timeout
     console.log(`⚡ Found ${allDatabaseResults.length} database results - need AI generation with 2-minute timeout`);
     
     const startTime = Date.now();
-    const twoMinuteTimeout = isServerless ? 10000 : 2 * 60 * 1000; // shorter on serverless
+    const twoMinuteTimeout = 2 * 60 * 1000; // enforce 2 minutes everywhere as requested
     const deadlineAt = startTime + twoMinuteTimeout;
     
     let competitors = [...allDatabaseResults]; // Start with what we have
