@@ -161,7 +161,9 @@ class DomainGenerator {
         if (!patterns) return;
 
         // Update the compact layout format
-        document.getElementById('averageLength').textContent = patterns.patterns?.averageLength ? `${patterns.patterns.averageLength} characters` : '14 characters';
+        const avgLenRaw = patterns.patterns?.averageLength;
+        const avgLen = (typeof avgLenRaw === 'number') ? Math.round(avgLenRaw) : null;
+        document.getElementById('averageLength').textContent = (avgLen !== null) ? `${avgLen} characters` : '14 characters';
         document.getElementById('lengthRange').textContent = patterns.recommendations?.optimalLength || '7 - 20 characters';
         document.getElementById('wordCount').textContent = patterns.patterns?.wordCount || '2 words';
         
@@ -171,12 +173,12 @@ class DomainGenerator {
         // Niche keywords as comma-separated list
         document.getElementById('nicheKeywordsList').textContent = patterns.nicheKeywords?.join(', ') || 'No keywords found';
         
-        // Structure patterns
-        const structures = patterns.patterns?.commonStructures || ['single word', 'two-word combination'];
-        document.getElementById('structurePatterns').textContent = Array.isArray(structures) ? structures.join(', ') : structures;
-        
-        // Brand types
-        document.getElementById('brandTypes').textContent = 'industry specific, compound';
+        // Structure patterns (fixed two-alternative template)
+        const structureTemplate = [
+            'prefix + niche keyword + suffix',
+            'niche keyword + descriptive word'
+        ];
+        document.getElementById('structurePatterns').textContent = structureTemplate.join('  |  ');
         
         // Brand Positioning moved under Domain Patterns
         const brandPos = patterns.recommendations?.brandPositioning || `Should sound premium and trustworthy for high-ticket ${this.currentNiche || 'niche'} customers`;
