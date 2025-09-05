@@ -19,36 +19,24 @@ const DOMAIN_DATABASES = {
     // Popular niches with canonical categories and synonyms
     // Used to: (1) Prefer preloaded competitors first; (2) Enforce exactly 5 when in DB; (3) Provide suggestions on errors
     popularNiches: {
-        'backyard': {
-            synonyms: ['patio', 'garden', 'yard', 'lawn', 'landscape', 'deck']
-        },
-        'pizza oven': {
-            synonyms: ['outdoor oven', 'wood fired oven', 'backyard cooking']
-        },
-        'marine': {
-            synonyms: ['boat', 'nautical', 'sailing', 'yacht', 'ocean', 'sea']
-        },
-        'fitness': {
-            synonyms: ['gym', 'training', 'workout', 'strength']
-        },
-        'drone': {
-            synonyms: ['uav', 'quadcopter', 'aerial', 'fpv']
-        },
-        'kitchen': {
-            synonyms: ['culinary', 'cookware', 'appliances']
-        },
-        'golf': {
-            synonyms: ['golfing', 'golf gear', 'golf clubs']
-        },
-        'wellness': {
-            synonyms: ['health', 'spa', 'recovery']
-        },
-        'garage': {
-            synonyms: ['workshop', 'automotive', 'storage']
-        },
-        'smart home': {
-            synonyms: ['home automation', 'iot', 'connected home']
-        }
+        'backyard': { synonyms: ['patio', 'garden', 'yard', 'lawn', 'landscape', 'deck'] },
+        'pizza oven': { synonyms: ['outdoor oven', 'wood fired oven', 'backyard cooking'] },
+        'marine': { synonyms: ['boat', 'nautical', 'sailing', 'yacht', 'ocean', 'sea'] },
+        'fitness': { synonyms: ['gym', 'training', 'workout', 'strength', 'home gym'] },
+        'drone': { synonyms: ['uav', 'quadcopter', 'aerial', 'fpv', 'drones'] },
+        'kitchen': { synonyms: ['culinary', 'cookware', 'appliances'] },
+        'golf': { synonyms: ['golfing', 'golf gear', 'golf clubs'] },
+        'wellness': { synonyms: ['health', 'spa', 'recovery', 'sauna'] },
+        'garage': { synonyms: ['workshop', 'automotive', 'storage'] },
+        'smart home': { synonyms: ['home automation', 'iot', 'connected home'] },
+        'fireplace': { synonyms: ['hearth', 'fire', 'electric fireplace', 'gas fireplace'] },
+        'hvac': { synonyms: ['heating', 'cooling', 'air conditioning'] },
+        'safes': { synonyms: ['safe', 'vault', 'gun safe'] },
+        'solar': { synonyms: ['solar kits', 'solar power', 'photovoltaic'] },
+        'generators': { synonyms: ['generator', 'backup power'] },
+        'horse riding': { synonyms: ['equestrian', 'equine', 'horses'] },
+        'sauna': { synonyms: ['infrared sauna', 'steam sauna'] },
+        'home theater': { synonyms: ['theater seating', 'projector', 'audio'] }
     },
 
     // High-Ticket Niche Terms (products $1000+)
