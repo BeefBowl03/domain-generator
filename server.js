@@ -1146,18 +1146,20 @@ app.post('/api/generate-domains', async (req, res) => {
     // Serverless shortcut: avoid heavy AI competitor generation
     if (isServerless) {
       let competitors = allDatabaseResults.slice(0, 12);
-      // If none made it through relevance filter, fall back to wide known stores without filtering
+
+      // If we don't have enough from curated/known, try a fast AI fallback
       if (competitors.length < 5) {
         try {
-          const wide = competitorFinder.getKnownStoresWide(niche) || [];
-          const global = competitorFinder.getKnownStoresGlobal() || [];
-          const unique = new Map();
-          for (const s of [...wide, ...global]) {
-            if (!s || !s.domain) continue;
-            const k = String(s.domain).replace(/^www\./,'').toLowerCase();
-            if (!unique.has(k)) unique.set(k, s);
+          const deadlineAt = Date.now() + 12000; // ~12s budget for serverless
+          const aiFast = await competitorFinder.getVerifiedCompetitors(niche, { fast: true, deadlineAt, maxAttempts: 1 });
+          const seen = new Set(competitors.map(c => String(c.domain || '').replace(/^www\./,'').toLowerCase()));
+          for (const s of (aiFast || [])) {
+            const k = String(s.domain || '').replace(/^www\./,'').toLowerCase();
+            if (!k || seen.has(k)) continue;
+            competitors.push(s);
+            seen.add(k);
+            if (competitors.length >= 12) break;
           }
-          competitors = Array.from(unique.values()).slice(0, 12);
         } catch (_) {}
       }
       if (competitors.length === 0) {
