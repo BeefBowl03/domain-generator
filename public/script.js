@@ -167,8 +167,7 @@ class DomainGenerator {
         document.getElementById('lengthRange').textContent = patterns.recommendations?.optimalLength || '7 - 20 characters';
         document.getElementById('wordCount').textContent = patterns.patterns?.wordCount || '2 words';
         
-        // Industry terms as comma-separated list
-        document.getElementById('industryTermsList').textContent = patterns.industryTerms?.join(', ') || 'No terms found';
+        // Industry terms display removed from frontend per user request
         
         // Niche keywords as comma-separated list
         document.getElementById('nicheKeywordsList').textContent = patterns.nicheKeywords?.join(', ') || 'No keywords found';

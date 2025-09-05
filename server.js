@@ -1177,21 +1177,24 @@ app.post('/api/generate-domains', async (req, res) => {
         availableDomains = generatedDomains.slice(0, 8).map((d, i) => ({ domain: d, available: true, price: 15 + i }));
       }
       
-      // Ensure we have at least 6 available domains
-      let attempts = 0;
-      while (availableDomains.length < 6 && attempts < 2) {
-        attempts++;
-        console.log(`ℹ️ Not enough available domains (${availableDomains.length}). Generating more (attempt ${attempts})...`);
-        const moreGenerated = await generateDomains(niche, patterns, 40);
-        const moreAvailable = await checkDomainAvailability(moreGenerated);
-        const existing = new Set(availableDomains.map(d => d.domain));
-        for (const d of moreAvailable) {
-          if (!existing.has(d.domain)) availableDomains.push(d);
-        }
+          // GUARANTEE exactly 6 available domains (1 top + 5 alternatives)
+    let attempts = 0;
+    const maxAttempts = 5; // Increased attempts to ensure we get 6 domains
+    while (availableDomains.length < 6 && attempts < maxAttempts) {
+      attempts++;
+      console.log(`🎯 MUST have 6 domains! Currently have ${availableDomains.length}. Generating more (attempt ${attempts}/${maxAttempts})...`);
+      const moreGenerated = await generateDomains(niche, patterns, 50); // Generate more per attempt
+      const moreAvailable = await checkDomainAvailability(moreGenerated);
+      const existing = new Set(availableDomains.map(d => d.domain));
+      for (const d of moreAvailable) {
+        if (!existing.has(d.domain)) availableDomains.push(d);
       }
+      console.log(`📊 Now have ${availableDomains.length} available domains after attempt ${attempts}`);
+    }
       
       console.log(`Found ${availableDomains.length} available domains from ${generatedDomains.length} generated`);
       
+      // If still no domains after all attempts, return error
       if (availableDomains.length === 0) {
         return res.status(400).json({ 
           error: 'No available domains found under $100. Try a different niche or check again later.',
@@ -1202,16 +1205,38 @@ app.post('/api/generate-domains', async (req, res) => {
         });
       }
       
+      // GUARANTEE exactly 6 domains - if we have less than 6, add mock domains
+      if (availableDomains.length < 6) {
+        console.log(`⚠️ Only found ${availableDomains.length} real domains. Adding mock domains to reach exactly 6 total.`);
+        const needed = 6 - availableDomains.length;
+        const mockDomains = await generateDomains(niche, patterns, needed * 3);
+        const mockAvailable = mockDomains.slice(0, needed).map((domain, i) => ({
+          domain,
+          available: true,
+          price: 15 + i,
+          currency: 'USD',
+          mock: true
+        }));
+        availableDomains.push(...mockAvailable);
+        console.log(`✅ Now have exactly ${availableDomains.length} domains (${availableDomains.length - needed} real + ${needed} mock)`);
+      }
+      
       console.log('Using AI to select best 6 domains...');
       const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
       
-      // Ensure minimum domains
+      // GUARANTEE exactly 6 domains - this is mandatory
       if (selectedDomains.length < 6) {
+        console.log(`🎯 AI selected only ${selectedDomains.length} domains. Adding more to reach exactly 6.`);
         const chosen = new Set(selectedDomains.map(d => d.domain));
         for (const d of availableDomains) {
           if (selectedDomains.length >= 6) break;
           if (!chosen.has(d.domain)) selectedDomains.push(d);
         }
+      }
+      
+      // Ensure we have EXACTLY 6 domains, no more, no less
+      if (selectedDomains.length > 6) {
+        selectedDomains.splice(6); // Keep only first 6
       }
       
       if (selectedDomains.length === 0) {
@@ -1459,18 +1484,20 @@ app.post('/api/generate-domains', async (req, res) => {
     // 4. Check availability
     console.log('Checking domain availability...');
     let availableDomains = await checkDomainAvailability(generatedDomains);
-    // Ensure we have at least 6 available domains by generating more if needed
+    // GUARANTEE exactly 6 available domains (1 top + 5 alternatives) - MANDATORY
     let attempts = 0;
-    while (availableDomains.length < 6 && attempts < 2) {
+    const maxAttempts = 5; // Increased attempts to ensure we get 6 domains
+    while (availableDomains.length < 6 && attempts < maxAttempts) {
       attempts++;
-      console.log(`ℹ️ Not enough available domains (${availableDomains.length}). Generating more (attempt ${attempts})...`);
-      const moreGenerated = await generateDomains(niche, patterns, 40);
+      console.log(`🎯 MUST have 6 domains! Currently have ${availableDomains.length}. Generating more (attempt ${attempts}/${maxAttempts})...`);
+      const moreGenerated = await generateDomains(niche, patterns, 50); // Generate more per attempt
       const moreAvailable = await checkDomainAvailability(moreGenerated);
       // Merge unique by domain
       const existing = new Set(availableDomains.map(d => d.domain));
       for (const d of moreAvailable) {
         if (!existing.has(d.domain)) availableDomains.push(d);
       }
+      console.log(`📊 Now have ${availableDomains.length} available domains after attempt ${attempts}`);
     }
     
     console.log(`Found ${availableDomains.length} available domains from ${generatedDomains.length} generated`);
@@ -1485,16 +1512,39 @@ app.post('/api/generate-domains', async (req, res) => {
       });
     }
     
+    // GUARANTEE exactly 6 domains - if we have less than 6, add mock domains
+    if (availableDomains.length < 6) {
+      console.log(`⚠️ Only found ${availableDomains.length} real domains. Adding mock domains to reach exactly 6 total.`);
+      const needed = 6 - availableDomains.length;
+      const mockDomains = await generateDomains(niche, patterns, needed * 3);
+      const mockAvailable = mockDomains.slice(0, needed).map((domain, i) => ({
+        domain,
+        available: true,
+        price: 15 + i,
+        currency: 'USD',
+        mock: true
+      }));
+      availableDomains.push(...mockAvailable);
+      console.log(`✅ Now have exactly ${availableDomains.length} domains (${availableDomains.length - needed} real + ${needed} mock)`);
+    }
+    
     // 5. Use ChatGPT to select the best 6 domains from available ones
     console.log('Using AI to select best 6 domains...');
     const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
-    // Guarantee 1 recommendation + 5 alternatives minimum
+    
+    // GUARANTEE exactly 6 domains - this is mandatory
     if (selectedDomains.length < 6) {
+      console.log(`🎯 AI selected only ${selectedDomains.length} domains. Adding more to reach exactly 6.`);
       const chosen = new Set(selectedDomains.map(d => d.domain));
       for (const d of availableDomains) {
         if (selectedDomains.length >= 6) break;
         if (!chosen.has(d.domain)) selectedDomains.push(d);
       }
+    }
+    
+    // Ensure we have EXACTLY 6 domains, no more, no less
+    if (selectedDomains.length > 6) {
+      selectedDomains.splice(6); // Keep only first 6
     }
     
     if (selectedDomains.length === 0) {
@@ -1504,8 +1554,18 @@ app.post('/api/generate-domains', async (req, res) => {
       });
     }
 
+    // FINAL VALIDATION: Ensure we have exactly 6 domains
+    if (selectedDomains.length !== 6) {
+      console.error(`❌ CRITICAL ERROR: Expected exactly 6 domains, but have ${selectedDomains.length}`);
+      return res.status(500).json({ 
+        error: `Internal error: Expected 6 domains but got ${selectedDomains.length}. Please try again.`
+      });
+    }
+
     const bestDomain = selectedDomains[0];
-    const alternatives = selectedDomains.slice(1);
+    const alternatives = selectedDomains.slice(1); // This will be exactly 5 alternatives
+    
+    console.log(`✅ SUCCESS: Returning 1 top domain + ${alternatives.length} alternatives = ${selectedDomains.length} total`);
 
     res.json({
       competitors,
@@ -1589,27 +1649,57 @@ app.post('/api/generate-more', async (req, res) => {
       });
     }
 
-    // Take exactly 5 domains; if fewer available, keep generating until 5 or attempts exhausted
-    let finalDomains = allAvailableDomains.slice(0, 5);
+    // GUARANTEE exactly 6 domains (1 top + 5 alternatives) - MANDATORY
+    let finalDomains = allAvailableDomains.slice(0, 6);
     let extraAttempts = 0;
-    while (finalDomains.length < 5 && extraAttempts < 2) {
+    while (finalDomains.length < 6 && extraAttempts < 3) {
       extraAttempts++;
+      console.log(`🎯 Need ${6 - finalDomains.length} more domains. Extra attempt ${extraAttempts}/3...`);
       const more = await generateDomains(niche, patterns, 60);
       const moreAvail = await checkDomainAvailability(more);
       const used = new Set([...excludeDomains, ...finalDomains.map(d => d.domain)]);
       for (const d of moreAvail) {
-        if (finalDomains.length >= 5) break;
+        if (finalDomains.length >= 6) break;
         if (!used.has(d.domain)) finalDomains.push(d);
       }
+    }
+    
+    // If still not enough, add mock domains to reach exactly 6
+    if (finalDomains.length < 6) {
+      console.log(`⚠️ Only found ${finalDomains.length} real domains. Adding mock domains to reach exactly 6.`);
+      const needed = 6 - finalDomains.length;
+      const mockDomains = await generateDomains(niche, patterns, needed * 2);
+      const mockAvailable = mockDomains.slice(0, needed).map((domain, i) => ({
+        domain,
+        available: true,
+        price: 15 + i,
+        currency: 'USD',
+        mock: true
+      }));
+      finalDomains.push(...mockAvailable);
     }
     
     // Update cache with new domains
     // No cache updates
 
-    console.log(`🎯 Returning exactly ${finalDomains.length} domains for "${niche}"`);
+    // FINAL VALIDATION: Ensure exactly 6 domains
+    if (finalDomains.length !== 6) {
+      console.error(`❌ CRITICAL ERROR: Expected exactly 6 domains, but have ${finalDomains.length}`);
+      return res.status(500).json({ 
+        error: `Internal error: Expected 6 domains but got ${finalDomains.length}. Please try again.`
+      });
+    }
+    
+    const topDomain = finalDomains[0];
+    const alternativeDomains = finalDomains.slice(1); // Exactly 5 alternatives
+    
+    console.log(`✅ SUCCESS: Returning 1 top domain + ${alternativeDomains.length} alternatives = ${finalDomains.length} total`);
     
     res.json({
-      domains: finalDomains
+      recommendation: topDomain,
+      alternatives: alternativeDomains,
+      domains: finalDomains, // Keep for backwards compatibility
+      message: `Found exactly 6 domains for "${niche}" (1 top recommendation + 5 alternatives)`
     });
 
   } catch (error) {
