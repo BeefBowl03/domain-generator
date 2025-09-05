@@ -5,171 +5,127 @@ const OpenAI = require('openai');
 class CompetitorFinder {
     constructor(openaiApiKey) {
         this.openai = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
-        // Known high-ticket dropshipping stores by niche
+        // Excluded major retailers
+        this.excludedRetailers = new Set([
+            'amazon.com', 'ebay.com', 'walmart.com', 'target.com',
+            'wayfair.com', 'homedepot.com', 'lowes.com', 'costco.com',
+            'alibaba.com', 'aliexpress.com', 'etsy.com', 'wish.com',
+            'overstock.com', 'ikea.com', 'bestbuy.com', 'macys.com'
+        ]);
+
+        // Known private e-commerce stores by niche (curated)
         this.knownStores = {
             'backyard': [
-                { name: 'Yard Mastery', url: 'https://yardmastery.com', domain: 'yardmastery.com' },
-                { name: 'Wayfair Outdoor', url: 'https://wayfair.com/outdoor', domain: 'wayfair.com' },
-                { name: 'Home Depot Outdoor', url: 'https://homedepot.com/outdoor', domain: 'homedepot.com' },
-               
-                { name: 'Hayneedle Outdoor', url: 'https://hayneedle.com/outdoor', domain: 'hayneedle.com' }
+                { name: 'bbqguys.com', url: 'https://bbqguys.com', domain: 'bbqguys.com' },
+                { name: 'firepitsdirect.com', url: 'https://firepitsdirect.com', domain: 'firepitsdirect.com' },
+                { name: 'firepitsurplus.com', url: 'https://firepitsurplus.com', domain: 'firepitsurplus.com' },
+                { name: 'theporchswingcompany.com', url: 'https://theporchswingcompany.com', domain: 'theporchswingcompany.com' },
+                { name: 'allthingsbarbecue.com', url: 'https://allthingsbarbecue.com', domain: 'allthingsbarbecue.com' }
             ],
-            'pizza oven': [
-                { name: 'Authentic Pizza Ovens', url: 'https://authenticpizzaovens.com', domain: 'authenticpizzaovens.com' },
-                { name: 'Pizza Oven Outlet', url: 'https://pizzaovenoutlet.com', domain: 'pizzaovenoutlet.com' },
-                { name: 'Forno Bravo', url: 'https://fornobravo.com', domain: 'fornobravo.com' }
-            ],
-            'drone': [
-                { name: 'RaceDayQuads', url: 'https://racedayquads.com', domain: 'racedayquads.com' },
-                { name: 'Ready Made RC', url: 'https://readymaderc.com', domain: 'readymaderc.com' },
-                { name: 'FPV Cycle', url: 'https://fpvcycle.com', domain: 'fpvcycle.com' },
-                { name: 'Pyro Drone', url: 'https://pyrodrone.com', domain: 'pyrodrone.com' },
-                { name: 'Unmanned Tech', url: 'https://unmannedtechshop.co.uk', domain: 'unmannedtechshop.co.uk' }
-            ],
-            'kitchen': [
-                { name: 'Kitchen Source', url: 'https://kitchensource.com', domain: 'kitchensource.com' },
-                { name: 'Cooking.com', url: 'https://cooking.com', domain: 'cooking.com' },
-                { name: 'Kitchen Kaboodle', url: 'https://kitchenkaboodle.com', domain: 'kitchenkaboodle.com' },
-                { name: 'Williams Sonoma', url: 'https://williams-sonoma.com', domain: 'williams-sonoma.com' }
-            ],
-            'golf': [
-                { name: 'Elite Golf Gear', url: 'https://elitegolfgear.com', domain: 'elitegolfgear.com' },
-                { name: 'Golf Masters Store', url: 'https://golfmastersstore.com', domain: 'golfmastersstore.com' },
-                { name: 'Rock Bottom Golf', url: 'https://rockbottomgolf.com', domain: 'rockbottomgolf.com' },
-                { name: 'Golf Galaxy', url: 'https://golfgalaxy.com', domain: 'golfgalaxy.com' }
-            ],
-            'firepit': [
-                { name: 'Fire Pit Surplus', url: 'https://firepitsurplus.com', domain: 'firepitsurplus.com' },
-                { name: 'Starfire Direct', url: 'https://starfiredirect.com', domain: 'starfiredirect.com' },
-                { name: 'Woodland Direct', url: 'https://woodlanddirect.com', domain: 'woodlanddirect.com' },
-                { name: 'BBQGuys', url: 'https://bbqguys.com', domain: 'bbqguys.com' },
-                { name: 'Flame Authority', url: 'https://flameauthority.com', domain: 'flameauthority.com' }
-            ],
-            'barbecue': [
-                { name: 'Grill Spot', url: 'https://grillspot.com', domain: 'grillspot.com' },
-                { name: 'BBQ Grill Outlet', url: 'https://bbqgrilloutlet.com', domain: 'bbqgrilloutlet.com' },
-                { name: 'Grills Direct', url: 'https://grillsdirect.com', domain: 'grillsdirect.com' },
-                { name: 'Outdoor Cooking Pros', url: 'https://outdoorcookingpros.com', domain: 'outdoorcookingpros.com' },
-                { name: 'BBQ Island', url: 'https://bbqisland.com', domain: 'bbqisland.com' }
-            ],
-            'marine': [
-                { name: 'Marine Engine Parts', url: 'https://marineengineparts.com', domain: 'marineengineparts.com' },
-                { name: 'Wholesale Marine', url: 'https://wholesalemarine.com', domain: 'wholesalemarine.com' },
-                { name: 'iBoats', url: 'https://iboats.com', domain: 'iboats.com' }
-            ],
-            'horse riding': [
-                { name: 'Equestrian Collections', url: 'https://equestriancollections.com', domain: 'equestriancollections.com' },
-                { name: 'Horse Gear World', url: 'https://horsegearworld.com', domain: 'horsegearworld.com' },
-                { name: 'Equine Now', url: 'https://equinenow.com', domain: 'equinenow.com' },
-                { name: 'Tack Room Supplies', url: 'https://tackroomsupplies.com', domain: 'tackroomsupplies.com' },
-                { name: 'Horse Tack Co', url: 'https://horsetackco.com', domain: 'horsetackco.com' }
+            'fireplace': [
+                { name: 'fireplacesdirect.com', url: 'https://fireplacesdirect.com', domain: 'fireplacesdirect.com' },
+                { name: 'electricfireplacesdirect.com', url: 'https://electricfireplacesdirect.com', domain: 'electricfireplacesdirect.com' },
+                { name: 'starfiredirect.com', url: 'https://starfiredirect.com', domain: 'starfiredirect.com' },
+                { name: 'usfireplacestore.com', url: 'https://usfireplacestore.com', domain: 'usfireplacestore.com' },
+                { name: 'electricfireplacesdepot.com', url: 'https://electricfireplacesdepot.com', domain: 'electricfireplacesdepot.com' }
             ],
             'wellness': [
-                { name: 'Health Products For You', url: 'https://healthproductsforyou.com', domain: 'healthproductsforyou.com' },
-                { name: 'Vitacost', url: 'https://vitacost.com', domain: 'vitacost.com' },
-                { name: 'iHerb', url: 'https://iherb.com', domain: 'iherb.com' },
-                { name: 'Thrive Market', url: 'https://thrivemarket.com', domain: 'thrivemarket.com' }
+                { name: 'recoveryforathletes.com', url: 'https://recoveryforathletes.com', domain: 'recoveryforathletes.com' },
+                { name: 'mysaunaworld.com', url: 'https://mysaunaworld.com', domain: 'mysaunaworld.com' },
+                { name: 'northernsaunas.com', url: 'https://northernsaunas.com', domain: 'northernsaunas.com' },
+                { name: 'secretsaunas.com', url: 'https://secretsaunas.com', domain: 'secretsaunas.com' },
+                { name: 'thesaunaheater.com', url: 'https://thesaunaheater.com', domain: 'thesaunaheater.com' }
             ],
-            'outdoor': [
-                { name: 'Outdoor Element', url: 'https://outdoorelement.com', domain: 'outdoorelement.com' },
-                { name: 'Gear Trade', url: 'https://geartrade.com', domain: 'geartrade.com' },
-                { name: 'Outdoor Gear Exchange', url: 'https://gearx.com', domain: 'gearx.com' },
-       
-                { name: 'Sierra Trading Post', url: 'https://sierra.com', domain: 'sierra.com' }
-            ],
-            'adventure': [
-                { name: 'Adventure Medical Kits', url: 'https://adventuremedicalkits.com', domain: 'adventuremedicalkits.com' },
-                { name: 'Outdoor Gear Lab', url: 'https://outdoorgearlab.com', domain: 'outdoorgearlab.com' },
-                { name: 'Steep & Cheap', url: 'https://steepandcheap.com', domain: 'steepandcheap.com' },
-                { name: 'Outdoor Prolink', url: 'https://outdoorprolink.com', domain: 'outdoorprolink.com' },
-                { name: 'Gear Coop', url: 'https://gearcoop.com', domain: 'gearcoop.com' }
-            ],
-            'garage': [
-                { name: 'Garage Storage Direct', url: 'https://garagestoragedirect.com', domain: 'garagestoragedirect.com' },
-                { name: 'Garage Flooring LLC', url: 'https://garageflooringllc.com', domain: 'garageflooringllc.com' },
-                { name: 'Garage Tool Store', url: 'https://garagetoolstore.com', domain: 'garagetoolstore.com' },
-                { name: 'Monkey Bar Storage', url: 'https://monkeybarstorage.com', domain: 'monkeybarstorage.com' },
-                { name: 'Garage Gear', url: 'https://garagegear.com', domain: 'garagegear.com' }
-            ],
-            'smart home': [
-                { name: 'Smart Home Store', url: 'https://smarthomestore.com', domain: 'smarthomestore.com' },
-                { name: 'Home Controls', url: 'https://homecontrols.com', domain: 'homecontrols.com' },
-                { name: 'Automated Outlet', url: 'https://automatedoutlet.com', domain: 'automatedoutlet.com' },
+            'golf': [
+                { name: 'shopindoorgolf.com', url: 'https://shopindoorgolf.com', domain: 'shopindoorgolf.com' },
+                { name: 'rainorshinegolf.com', url: 'https://rainorshinegolf.com', domain: 'rainorshinegolf.com' },
+                { name: 'carlsgolfland.com', url: 'https://carlsgolfland.com', domain: 'carlsgolfland.com' },
+                { name: 'topshelfgolf.com', url: 'https://topshelfgolf.com', domain: 'topshelfgolf.com' },
+                { name: 'golfsimulatorsforhome.com', url: 'https://golfsimulatorsforhome.com', domain: 'golfsimulatorsforhome.com' }
             ],
             'fitness': [
-                { name: 'Rogue Fitness', url: 'https://www.roguefitness.com', domain: 'roguefitness.com' },
-                { name: 'Titan Fitness', url: 'https://www.titan.fitness', domain: 'titan.fitness' },
-                { name: 'Rep Fitness', url: 'https://www.repfitness.com', domain: 'repfitness.com' },
-                { name: 'Force USA', url: 'https://www.forceusa.com', domain: 'forceusa.com' },
-                { name: 'Again Faster', url: 'https://www.againfaster.com', domain: 'againfaster.com' }
+                { name: 'strengthwarehouseusa.com', url: 'https://strengthwarehouseusa.com', domain: 'strengthwarehouseusa.com' },
+                { name: 'fitnessfactory.com', url: 'https://fitnessfactory.com', domain: 'fitnessfactory.com' },
+                { name: 'fitnesszone.com', url: 'https://fitnesszone.com', domain: 'fitnesszone.com' },
+                { name: 'marcypro.com', url: 'https://marcypro.com', domain: 'marcypro.com' },
+                { name: 'globalfitness.com', url: 'https://globalfitness.com', domain: 'globalfitness.com' }
             ],
-            'automotive': [
-                { name: 'Auto Parts Warehouse', url: 'https://autopartswarehouse.com', domain: 'autopartswarehouse.com' },
-                { name: 'Car Parts.com', url: 'https://carparts.com', domain: 'carparts.com' },
-                { name: 'Auto Accessories Garage', url: 'https://autoaccessoriesgarage.com', domain: 'autoaccessoriesgarage.com' },
-                { name: 'JC Whitney', url: 'https://jcwhitney.com', domain: 'jcwhitney.com' },
-                { name: 'Car ID', url: 'https://carid.com', domain: 'carid.com' }
-            ],
-            'jewelry': [
-                { name: 'Jewelry Depot', url: 'https://jewelrydepot.com', domain: 'jewelrydepot.com' },
-                { name: 'Diamond Nexus', url: 'https://diamondnexus.com', domain: 'diamondnexus.com' },
-                { name: 'Jewelry Exchange', url: 'https://jewelryexchange.com', domain: 'jewelryexchange.com' },
-                { name: 'Ice.com', url: 'https://ice.com', domain: 'ice.com' },
-                { name: 'SuperJeweler', url: 'https://superjeweler.com', domain: 'superjeweler.com' }
-            ],
-            'watches': [
-                { name: 'Watch Depot', url: 'https://watchdepot.com', domain: 'watchdepot.com' },
-                { name: 'Watches.com', url: 'https://watches.com', domain: 'watches.com' },
-                { name: 'TimeZone Watch', url: 'https://timezonewatch.com', domain: 'timezonewatch.com' },
-                { name: 'Watch Station', url: 'https://watchstation.com', domain: 'watchstation.com' },
-                { name: 'eBay Watches', url: 'https://ebay.com/watches', domain: 'ebay.com' }
-            ],
-            'home decor': [
-                { name: 'Home Decorators Collection', url: 'https://homedecorators.com', domain: 'homedecorators.com' },
-                { name: 'Decor Steals', url: 'https://decorsteals.com', domain: 'decorsteals.com' },
-                { name: 'HomeGoods Online', url: 'https://homegoods.com', domain: 'homegoods.com' },
-                { name: 'Decor Market', url: 'https://decormarket.com', domain: 'decormarket.com' },
-                { name: 'Home Depot Decor', url: 'https://homedepot.com/decor', domain: 'homedepot.com' }
+            'home theater': [
+                { name: 'projectorpeople.com', url: 'https://projectorpeople.com', domain: 'projectorpeople.com' },
+                { name: '4seating.com', url: 'https://4seating.com', domain: '4seating.com' },
+                { name: 'htmarket.com', url: 'https://htmarket.com', domain: 'htmarket.com' },
+                { name: 'theaterseatstore.com', url: 'https://theaterseatstore.com', domain: 'theaterseatstore.com' },
+                { name: 'upscaleaudio.com', url: 'https://upscaleaudio.com', domain: 'upscaleaudio.com' }
             ],
             'kitchen': [
-                { name: 'Kitchen Source', url: 'https://kitchensource.com', domain: 'kitchensource.com' },
-                { name: 'Cooking.com', url: 'https://cooking.com', domain: 'cooking.com' },
-                { name: 'Kitchen Collection', url: 'https://kitchencollection.com', domain: 'kitchencollection.com' },
-                { name: 'Chef Central', url: 'https://chefcentral.com', domain: 'chefcentral.com' },
-                { name: 'Kitchen Kaboodle', url: 'https://kitchenkaboodle.com', domain: 'kitchenkaboodle.com' }
+                { name: 'ajmadison.com', url: 'https://ajmadison.com', domain: 'ajmadison.com' },
+                { name: 'therangehoodstore.com', url: 'https://therangehoodstore.com', domain: 'therangehoodstore.com' },
+                { name: 'premiumhomesource.com', url: 'https://premiumhomesource.com', domain: 'premiumhomesource.com' },
+                { name: 'seattlecoffeegear.com', url: 'https://seattlecoffeegear.com', domain: 'seattlecoffeegear.com' },
+                { name: 'majestycoffee.com', url: 'https://majestycoffee.com', domain: 'majestycoffee.com' }
             ],
-            'baby': [
-                { name: 'Baby Gear Lab', url: 'https://babygearlab.com', domain: 'babygearlab.com' },
-                { name: 'Baby Depot', url: 'https://babydepot.com', domain: 'babydepot.com' },
-                { name: 'Albee Baby', url: 'https://albeebaby.com', domain: 'albeebaby.com' },
-                { name: 'Baby Earth', url: 'https://babyearth.com', domain: 'babyearth.com' },
-                { name: 'Baby Bunting', url: 'https://babybunting.com', domain: 'babybunting.com' }
+            'hvac': [
+                { name: 'heatandcool.com', url: 'https://heatandcool.com', domain: 'heatandcool.com' },
+                { name: 'alpinehomeair.com', url: 'https://alpinehomeair.com', domain: 'alpinehomeair.com' },
+                { name: 'totalhomesupply.com', url: 'https://totalhomesupply.com', domain: 'totalhomesupply.com' },
+                { name: 'acwholesalers.com', url: 'https://acwholesalers.com', domain: 'acwholesalers.com' },
+                { name: 'hvacquick.com', url: 'https://hvacquick.com', domain: 'hvacquick.com' }
             ],
-            'pet': [
-                { name: 'Entirely Pets', url: 'https://entirelypets.com', domain: 'entirelypets.com' },
-                { name: 'Chewy', url: 'https://chewy.com', domain: 'chewy.com' },
-                { name: 'Petco', url: 'https://petco.com', domain: 'petco.com' }
+            'safes': [
+                { name: 'deansafe.com', url: 'https://deansafe.com', domain: 'deansafe.com' },
+                { name: 'thesafekeeper.com', url: 'https://thesafekeeper.com', domain: 'thesafekeeper.com' },
+                { name: 'nwsafe.com', url: 'https://nwsafe.com', domain: 'nwsafe.com' },
+                { name: 'safeandvaultstore.com', url: 'https://safeandvaultstore.com', domain: 'safeandvaultstore.com' },
+                { name: 'libertysafe.com', url: 'https://libertysafe.com', domain: 'libertysafe.com' }
             ],
-            'electronics': [
-                { name: 'Electronics Expo', url: 'https://electronicsexpo.com', domain: 'electronicsexpo.com' },
-                { name: 'TigerDirect', url: 'https://tigerdirect.com', domain: 'tigerdirect.com' },
-                { name: 'Electronics Valley', url: 'https://electronicsvalley.com', domain: 'electronicsvalley.com' },
-                { name: 'Fry\'s Electronics', url: 'https://frys.com', domain: 'frys.com' },
-                { name: 'Electronics For Less', url: 'https://electronicsforless.com', domain: 'electronicsforless.com' }
+            'solar': [
+                { name: 'shopsolarkits.com', url: 'https://shopsolarkits.com', domain: 'shopsolarkits.com' },
+                { name: 'gogreensolar.com', url: 'https://gogreensolar.com', domain: 'gogreensolar.com' },
+                { name: 'wholesalesolar.com', url: 'https://wholesalesolar.com', domain: 'wholesalesolar.com' },
+                { name: 'mrsolar.com', url: 'https://mrsolar.com', domain: 'mrsolar.com' },
+                { name: 'solarpowersupply.com', url: 'https://solarpowersupply.com', domain: 'solarpowersupply.com' }
             ],
-            'man cave': [
-                { name: 'Man Cave Store', url: 'https://mancavestore.com', domain: 'mancavestore.com' },
-                { name: 'Game Room Guys', url: 'https://gameroomguys.com', domain: 'gameroomguys.com' },
-                { name: 'Bar Stools and More', url: 'https://barstoolsandmore.com', domain: 'barstoolsandmore.com' },
-                { name: 'Pool Table Portfolio', url: 'https://pooltableportfolio.com', domain: 'pooltableportfolio.com' },
-                { name: 'Entertainment Furniture', url: 'https://entertainmentfurniture.com', domain: 'entertainmentfurniture.com' }
+            'drones': [
+                { name: 'dronefly.com', url: 'https://dronefly.com', domain: 'dronefly.com' },
+                { name: 'advexure.com', url: 'https://advexure.com', domain: 'advexure.com' },
+                { name: 'maverickdrone.com', url: 'https://maverickdrone.com', domain: 'maverickdrone.com' },
+                { name: 'dronenerds.com', url: 'https://dronenerds.com', domain: 'dronenerds.com' },
+                { name: 'buydronesonline.com', url: 'https://buydronesonline.com', domain: 'buydronesonline.com' }
             ],
-            'mancave': [
-                { name: 'Man Cave Store', url: 'https://mancavestore.com', domain: 'mancavestore.com' },
-                { name: 'Game Room Guys', url: 'https://gameroomguys.com', domain: 'gameroomguys.com' },
-                { name: 'Bar Stools and More', url: 'https://barstoolsandmore.com', domain: 'barstoolsandmore.com' },
-                { name: 'Pool Table Portfolio', url: 'https://pooltableportfolio.com', domain: 'pooltableportfolio.com' },
-                { name: 'Entertainment Furniture', url: 'https://entertainmentfurniture.com', domain: 'entertainmentfurniture.com' }
+            'generators': [
+                { name: 'generatormart.com', url: 'https://generatormart.com', domain: 'generatormart.com' },
+                { name: 'electricgeneratorsdirect.com', url: 'https://electricgeneratorsdirect.com', domain: 'electricgeneratorsdirect.com' },
+                { name: 'generatorsupercenter.com', url: 'https://generatorsupercenter.com', domain: 'generatorsupercenter.com' },
+                { name: 'norwall.com', url: 'https://norwall.com', domain: 'norwall.com' },
+                { name: 'apelectric.com', url: 'https://apelectric.com', domain: 'apelectric.com' }
+            ],
+            'horse riding': [
+                { name: 'doversaddlery.com', url: 'https://doversaddlery.com', domain: 'doversaddlery.com' },
+                { name: 'smartpakequine.com', url: 'https://smartpakequine.com', domain: 'smartpakequine.com' },
+                { name: 'chicksaddlery.com', url: 'https://chicksaddlery.com', domain: 'chicksaddlery.com' },
+                { name: 'horseloverz.com', url: 'https://horseloverz.com', domain: 'horseloverz.com' },
+                { name: 'statelinetack.com', url: 'https://statelinetack.com', domain: 'statelinetack.com' }
+            ],
+            'sauna': [
+                { name: 'saunaplace.com', url: 'https://saunaplace.com', domain: 'saunaplace.com' },
+                { name: 'theblissfulplace.com', url: 'https://theblissfulplace.com', domain: 'theblissfulplace.com' },
+                { name: 'saunaking.com', url: 'https://saunaking.com', domain: 'saunaking.com' },
+                { name: 'almostheaven.com', url: 'https://almostheaven.com', domain: 'almostheaven.com' },
+                { name: 'finnleo.com', url: 'https://finnleo.com', domain: 'finnleo.com' }
+            ],
+            'pizza oven': [
+                { name: 'pizzaovens.com', url: 'https://pizzaovens.com', domain: 'pizzaovens.com' },
+                { name: 'patioandpizza.com', url: 'https://patioandpizza.com', domain: 'patioandpizza.com' },
+                { name: 'thepizzaovenshop.com', url: 'https://thepizzaovenshop.com', domain: 'thepizzaovenshop.com' },
+                { name: 'wppo.com', url: 'https://wppo.com', domain: 'wppo.com' },
+                { name: 'pizzaequipmentpros.com', url: 'https://pizzaequipmentpros.com', domain: 'pizzaequipmentpros.com' }
+            ],
+            'exercise equipment': [
+                { name: 'globalfitness.com', url: 'https://globalfitness.com', domain: 'globalfitness.com' },
+                { name: 'fitnessfactory.com', url: 'https://fitnessfactory.com', domain: 'fitnessfactory.com' },
+                { name: 'gymsource.com', url: 'https://gymsource.com', domain: 'gymsource.com' },
+                { name: 'marcypro.com', url: 'https://marcypro.com', domain: 'marcypro.com' },
+                { name: 'ironcompany.com', url: 'https://ironcompany.com', domain: 'ironcompany.com' }
             ]
         };
     }
@@ -198,10 +154,20 @@ class CompetitorFinder {
     }
 
     normalizeNiche(niche) {
-        return niche.toLowerCase()
-            .replace(/[^\w\s]/g, '') // Remove special characters
-            .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+        const n = String(niche || '').toLowerCase()
+            .replace(/[^\w\s]/g, '')
+            .replace(/\s+/g, ' ')
             .trim();
+        // Map common no-space/alias variations to canonical niches
+        const aliases = {
+            'horseriding': 'horse riding',
+            'hometheater': 'home theater',
+            'pizzaoven': 'pizza oven',
+            'exerciseequipment': 'exercise equipment',
+            'smarthome': 'smart home',
+            'homegym': 'fitness'
+        };
+        return aliases[n.replace(/\s+/g, '')] || n;
     }
 
     getNicheVariations(niche) {
@@ -624,6 +590,7 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
             for (const s of list) {
                 if (!s || !s.domain) continue;
                 const key = (s.domain || '').replace(/^www\./, '').toLowerCase();
+                if (this.excludedRetailers && this.excludedRetailers.has(key)) continue;
                 if (added.has(key)) continue;
                 added.add(key);
                 result.push(s);
@@ -649,6 +616,7 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
             for (const s of (this.knownStores[key] || [])) {
                 if (!s || !s.domain) continue;
                 const k = (s.domain || '').replace(/^www\./, '').toLowerCase();
+                if (this.excludedRetailers && this.excludedRetailers.has(k)) continue;
                 if (!unique.has(k)) unique.set(k, s);
             }
         }

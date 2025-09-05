@@ -1018,7 +1018,10 @@ app.post('/api/generate-domains', async (req, res) => {
     const curated = await fetchCuratedStores(niche);
 
     // Check similar/related niches using known stores wide search
-    const knownStores = competitorFinder.getKnownStoresWide(niche) || [];
+    const knownStores = (competitorFinder.getKnownStoresWide(niche) || []).filter(s => {
+      const key = String(s && s.domain || '').replace(/^www\./,'').toLowerCase();
+      return !(competitorFinder.excludedRetailers && competitorFinder.excludedRetailers.has(key));
+    });
     
     // Combine database results (curated + known stores)
     const allDatabaseResults = [];
