@@ -651,6 +651,23 @@ async function generateDomains(niche, patterns, count = 40) {
       if (!allDomains.includes(d)) allDomains.push(d);
     }
   }
+  
+  // CRITICAL: Filter out domains with incomplete words
+  console.log(`🔍 Validating ${allDomains.length} domains for complete words...`);
+  const validDomains = allDomains.filter(domain => hasCompleteWords(domain));
+  console.log(`✅ ${validDomains.length}/${allDomains.length} domains passed complete word validation`);
+  
+  // If we filtered out too many, generate more to compensate
+  if (validDomains.length < count * 0.7) {
+    console.log(`⚠️  Need more domains with complete words. Generating additional domains...`);
+    const additionalProfessional = await generateProfessionalDomains(niche, nicheTermsFromDB, nicheKeywords, industryTerms, 10);
+    const additionalPoetic = await generatePoeticDomains(niche, nicheTermsFromDB, poeticDescriptors, 10);
+    const additionalValid = [...additionalProfessional, ...additionalPoetic].filter(domain => hasCompleteWords(domain));
+    validDomains.push(...additionalValid);
+    console.log(`📈 Added ${additionalValid.length} more domains with complete words`);
+  }
+  
+  allDomains = validDomains;
   console.log(`✅ Generated ${professionalDomains.length} professional + ${poeticDomains.length} poetic = ${allDomains.length} total domains`);
   
   return allDomains;
@@ -662,11 +679,13 @@ async function generateProfessionalDomains(niche, nicheTerms, nicheKeywords, ind
 
 🎯 CRITICAL REQUIREMENTS:
 ✅ All domains MUST be clearly related to ${niche}
-✅ Use ONLY complete, real words - NO truncated or made-up words
+✅ Use ONLY complete, real words - ABSOLUTELY NO truncated or made-up words
 ✅ Each word in the domain must be a real, recognizable English word
-✅ NO abbreviations like "Greensanct" (should be "GreenSanctuary")
-✅ NO partial words like "Prolansk" (should be "ProLandscape")
-✅ 7-15 characters total (can be slightly longer if needed for real words)
+✅ FORBIDDEN: "HomeSanct" (should be "HomeSanctuary"), "ProFire" is OK, "ProFir" is NOT
+✅ FORBIDDEN: "GreenLand" is OK, "GreenLan" is NOT
+✅ FORBIDDEN: Any word that looks cut off or incomplete
+✅ 7-20 characters total (prioritize complete words over length limits)
+✅ Every single word must be complete and recognizable
 
 NICHE CONTEXT: ${niche}
 INDUSTRY TERMS: ${industryTerms.join(', ')}
@@ -722,12 +741,15 @@ async function generatePoeticDomains(niche, nicheTerms, poeticDescriptors, count
 
 🎯 CRITICAL REQUIREMENTS:
 ✅ All domains MUST be clearly related to ${niche}
-✅ Use ONLY complete, real words - NO truncated or made-up words
+✅ Use ONLY complete, real words - ABSOLUTELY NO truncated or made-up words
 ✅ Each word in the domain must be a real, recognizable English word
-✅ NO abbreviations or partial words
-✅ 6-15 characters total (can be slightly longer if needed for real words)
+✅ FORBIDDEN: "FireSanct" (should be "FireSanctuary"), "BlueOce" (should be "BlueOcean")
+✅ FORBIDDEN: "PremHeat" (should be "PremiumHeat"), "GoldFin" (should be "GoldFinish")
+✅ FORBIDDEN: Any word that looks cut off or incomplete
+✅ 6-20 characters total (prioritize complete words over length limits)
 ✅ Creative, catchy, memorable
 ✅ Easy to spell and pronounce
+✅ Every single word must be complete and recognizable
 
 NICHE CONTEXT: ${niche}
 NICHE TERMS: ${nicheTerms.join(', ')}
@@ -815,46 +837,79 @@ function extractDomainsFromResponse(content, maxCount) {
   return domains.slice(0, maxCount);
 }
 
-// Fallback professional domain generation - SHORT domains
+// Fallback professional domain generation - COMPLETE WORDS ONLY
 function generateFallbackProfessionalDomains(niche, nicheTerms, count = 20) {
   const domains = [];
-  const shortPrefixes = ['Pro', 'Elite', 'Apex', 'Zen', 'Lux', 'Prime'];
-  const shortSuffixes = ['x', 'o', 'a', 'i', 'us', 'ex'];
-  const nicheShort = niche.substring(0, 4); // First 4 letters of niche
+  const completePrefixes = ['Pro', 'Elite', 'Apex', 'Prime', 'Top', 'Best', 'Max', 'Ultra', 'Super'];
+  const completeSuffixes = ['Pro', 'Hub', 'Zone', 'Direct', 'Plus', 'Max', 'Store', 'Shop'];
   
-  // Generate short professional domains
-  for (const prefix of shortPrefixes) {
-    if (domains.length < count/2) {
-      domains.push(`${prefix}${nicheShort}.com`);
+  // Use complete niche terms instead of truncated niche
+  const completeNicheTerms = [...nicheTerms, niche.replace(/\s+/g, '')];
+  
+  // Generate domains with complete words only
+  for (const prefix of completePrefixes) {
+    for (const nicheTerm of completeNicheTerms) {
+      if (domains.length < count && hasCompleteWords(`${prefix}${nicheTerm}.com`)) {
+        domains.push(`${prefix}${nicheTerm}.com`);
+      }
+      if (domains.length >= count) break;
     }
+    if (domains.length >= count) break;
   }
   
-  for (const suffix of shortSuffixes) {
-    if (domains.length < count) {
-      domains.push(`${nicheShort}${suffix}.com`);
+  // Add suffix combinations if we need more
+  for (const suffix of completeSuffixes) {
+    for (const nicheTerm of completeNicheTerms) {
+      if (domains.length < count && hasCompleteWords(`${nicheTerm}${suffix}.com`)) {
+        domains.push(`${nicheTerm}${suffix}.com`);
+      }
+      if (domains.length >= count) break;
     }
+    if (domains.length >= count) break;
   }
   
-  return domains.slice(0, count);
+  // Filter to ensure all domains have complete words
+  const validDomains = domains.filter(domain => hasCompleteWords(domain));
+  console.log(`✅ Fallback generated ${validDomains.length} domains with complete words`);
+  
+  return validDomains.slice(0, count);
 }
 
-// Fallback poetic domain generation - SHORT creative domains
+// Fallback poetic domain generation - COMPLETE WORDS ONLY
 function generateFallbackPoeticDomains(niche, nicheTerms, descriptors, count = 20) {
   const domains = [];
-  const shortWords = ['Zen', 'Flux', 'Echo', 'Bolt', 'Sage', 'Prism', 'Nexus', 'Vibe'];
-  const nicheShort = niche.substring(0, 4);
+  const completeCreativeWords = ['Zen', 'Flux', 'Echo', 'Bolt', 'Sage', 'Prism', 'Nexus', 'Vibe', 'Pure', 'Peak', 'Core', 'Flow', 'Wave', 'Spark'];
   
-  // Generate short creative domains
-  for (const word of shortWords) {
-    if (domains.length < count/2) {
-      domains.push(`${word}.com`);
+  // Use complete niche terms and descriptors (no truncation!)
+  const completeTerms = [...nicheTerms, ...descriptors, niche.replace(/\s+/g, '')];
+  
+  // Generate combinations with complete words only
+  for (const creativeWord of completeCreativeWords) {
+    for (const term of completeTerms) {
+      if (domains.length < count && hasCompleteWords(`${creativeWord}${term}.com`)) {
+        domains.push(`${creativeWord}${term}.com`);
+      }
+      if (domains.length >= count) break;
     }
-    if (domains.length < count) {
-      domains.push(`${nicheShort}${word}.com`);
-    }
+    if (domains.length >= count) break;
   }
   
-  return domains.slice(0, count);
+  // Reverse combinations if we need more
+  for (const term of completeTerms) {
+    for (const creativeWord of completeCreativeWords) {
+      if (domains.length < count && hasCompleteWords(`${term}${creativeWord}.com`)) {
+        domains.push(`${term}${creativeWord}.com`);
+      }
+      if (domains.length >= count) break;
+    }
+    if (domains.length >= count) break;
+  }
+  
+  // Filter to ensure all domains have complete words
+  const validDomains = domains.filter(domain => hasCompleteWords(domain));
+  console.log(`✅ Fallback poetic generated ${validDomains.length} domains with complete words`);
+  
+  return validDomains.slice(0, count);
 }
 
 // Check domain availability using Name.com API
@@ -972,6 +1027,56 @@ function calculateDomainScore(domainObj, niche, patterns) {
   return Math.max(0, score); // Ensure non-negative score
 }
 
+// Validate that domain uses only complete words (no truncated words)
+function hasCompleteWords(domain) {
+  const domainName = domain.replace('.com', '').toLowerCase();
+  
+  // Common incomplete word patterns to reject
+  const incompletePatterns = [
+    /sanct$/,     // HomeSanct -> should be Sanctuary
+    /prem$/,      // PremHeat -> should be Premium  
+    /prof$/,      // ProfFire -> should be Professional
+    /elit$/,      // ElitFire -> should be Elite
+    /luxu$/,      // LuxuHeat -> should be Luxury
+    /mast$/,      // MastFire -> should be Master
+    /supe$/,      // SupeFire -> should be Super
+    /ulti$/,      // UltiFire -> should be Ultimate
+    /exec$/,      // ExecFire -> should be Executive
+    /adva$/,      // AdvaFire -> should be Advanced
+    /plat$/,      // PlatFire -> should be Platinum
+    /diam$/,      // DiamFire -> should be Diamond
+    /sign$/,      // SignFire -> should be Signature
+    /pres$/,      // PresFire -> should be Prestige
+    /fini$/,      // FiniFire -> should be Finish
+    /qual$/,      // QualFire -> should be Quality
+    /solu$/,      // SoluFire -> should be Solution
+    /syst$/,      // SystFire -> should be System
+    /equi$/,      // EquiFire -> should be Equipment
+    /mach$/,      // MachFire -> should be Machine
+    /tech$/,      // TechFire -> should be Technology (but Tech is acceptable)
+    /auto$/,      // AutoFire -> should be Automatic (but Auto is acceptable)
+  ];
+  
+  // Check for incomplete patterns
+  for (const pattern of incompletePatterns) {
+    if (pattern.test(domainName)) {
+      console.log(`❌ Rejected domain "${domain}" - contains incomplete word pattern: ${pattern}`);
+      return false;
+    }
+  }
+  
+  // Check for very short "words" that might be truncated (less than 3 chars)
+  const words = domainName.split(/(?=[A-Z])/); // Split on capital letters
+  for (const word of words) {
+    if (word.length > 0 && word.length < 3 && !/^(go|to|my|be|we|it|is|or|up|on|in|at|by|no)$/.test(word.toLowerCase())) {
+      console.log(`❌ Rejected domain "${domain}" - contains very short word: "${word}"`);
+      return false;
+    }
+  }
+  
+  return true;
+}
+
 // Use ChatGPT to select the best 6 domains from available ones
 async function selectBestDomainsWithAI(availableDomains, niche, patterns) {
   if (availableDomains.length === 0) {
@@ -1080,7 +1185,25 @@ app.post('/api/niche', async (req, res) => {
       res.json({ nicheId, niche });
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    // COMPREHENSIVE ERROR LOGGING for troubleshooting
+    const errorDetails = {
+      timestamp: new Date().toISOString(),
+      endpoint: '/api/niche',
+      niche: niche,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      requestBody: req.body,
+      userAgent: req.get('User-Agent'),
+      ip: req.ip || req.connection.remoteAddress,
+    };
+    
+    console.error('❌ CRITICAL ERROR in /api/niche:', JSON.stringify(errorDetails, null, 2));
+    console.error('Full error object:', error);
+    
+    res.status(500).json({ 
+      error: error.message || 'An unexpected error occurred while processing niche',
+      debug: process.env.NODE_ENV === 'development' ? errorDetails : undefined
+    });
   }
 });
 
@@ -1579,8 +1702,26 @@ app.post('/api/generate-domains', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error generating domains:', error);
-    res.status(500).json({ error: error.message });
+    // COMPREHENSIVE ERROR LOGGING for troubleshooting
+    const errorDetails = {
+      timestamp: new Date().toISOString(),
+      endpoint: '/api/generate-domains',
+      niche: niche,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      requestBody: req.body,
+      userAgent: req.get('User-Agent'),
+      ip: req.ip || req.connection.remoteAddress,
+    };
+    
+    console.error('❌ CRITICAL ERROR in /api/generate-domains:', JSON.stringify(errorDetails, null, 2));
+    console.error('Full error object:', error);
+    
+    // Send user-friendly error with hidden debug info
+    res.status(500).json({ 
+      error: error.message || 'An unexpected error occurred while generating domains',
+      debug: process.env.NODE_ENV === 'development' ? errorDetails : undefined
+    });
   }
 });
 
@@ -1703,8 +1844,26 @@ app.post('/api/generate-more', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error generating more domains:', error);
-    res.status(500).json({ error: error.message });
+    // COMPREHENSIVE ERROR LOGGING for troubleshooting
+    const errorDetails = {
+      timestamp: new Date().toISOString(),
+      endpoint: '/api/generate-more',
+      niche: niche,
+      excludeDomains: excludeDomains,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      requestBody: req.body,
+      userAgent: req.get('User-Agent'),
+      ip: req.ip || req.connection.remoteAddress,
+    };
+    
+    console.error('❌ CRITICAL ERROR in /api/generate-more:', JSON.stringify(errorDetails, null, 2));
+    console.error('Full error object:', error);
+    
+    res.status(500).json({ 
+      error: error.message || 'An unexpected error occurred while generating more domains',
+      debug: process.env.NODE_ENV === 'development' ? errorDetails : undefined
+    });
   }
 });
 
@@ -1739,8 +1898,25 @@ app.post('/api/purge-memory', async (req, res) => {
 
     return res.json({ ok: true, message: 'All AI-related niche data purged from SQLite.' });
   } catch (error) {
-    console.error('Error purging memory:', error);
-    return res.status(500).json({ ok: false, error: error.message });
+    // COMPREHENSIVE ERROR LOGGING for troubleshooting
+    const errorDetails = {
+      timestamp: new Date().toISOString(),
+      endpoint: '/api/purge-memory',
+      errorMessage: error.message,
+      errorStack: error.stack,
+      requestBody: req.body,
+      userAgent: req.get('User-Agent'),
+      ip: req.ip || req.connection.remoteAddress,
+    };
+    
+    console.error('❌ CRITICAL ERROR in /api/purge-memory:', JSON.stringify(errorDetails, null, 2));
+    console.error('Full error object:', error);
+    
+    return res.status(500).json({ 
+      ok: false, 
+      error: error.message || 'An unexpected error occurred while purging memory',
+      debug: process.env.NODE_ENV === 'development' ? errorDetails : undefined
+    });
   }
 });
 
@@ -1808,10 +1984,66 @@ app.post('/api/set-curated-competitors', async (req, res) => {
   }
 });
 
+// Global error handlers for unhandled errors
+process.on('uncaughtException', (error) => {
+  const errorDetails = {
+    timestamp: new Date().toISOString(),
+    type: 'uncaughtException',
+    errorMessage: error.message,
+    errorStack: error.stack,
+  };
+  
+  console.error('❌ UNCAUGHT EXCEPTION:', JSON.stringify(errorDetails, null, 2));
+  console.error('Full error object:', error);
+  
+  // Don't exit the process in production to avoid downtime
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(1);
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  const errorDetails = {
+    timestamp: new Date().toISOString(),
+    type: 'unhandledRejection',
+    reason: reason,
+    promise: promise,
+  };
+  
+  console.error('❌ UNHANDLED PROMISE REJECTION:', JSON.stringify(errorDetails, null, 2));
+  console.error('Full reason:', reason);
+});
+
+// Global Express error handler
+app.use((error, req, res, next) => {
+  const errorDetails = {
+    timestamp: new Date().toISOString(),
+    type: 'expressError',
+    endpoint: req.path,
+    method: req.method,
+    errorMessage: error.message,
+    errorStack: error.stack,
+    requestBody: req.body,
+    userAgent: req.get('User-Agent'),
+    ip: req.ip || req.connection.remoteAddress,
+  };
+  
+  console.error('❌ EXPRESS ERROR HANDLER:', JSON.stringify(errorDetails, null, 2));
+  console.error('Full error object:', error);
+  
+  res.status(500).json({ 
+    error: error.message || 'An unexpected server error occurred',
+    debug: process.env.NODE_ENV === 'development' ? errorDetails : undefined
+  });
+});
+
 // Export handler for serverless, only listen locally in non-serverless
 if (!isServerless) {
   app.listen(port, () => {
-    console.log(`Domain generator server running at http://localhost:${port}`);
+    console.log(`🚀 Domain generator server running at http://localhost:${port}`);
+    console.log(`📊 Environment: ${isServerless ? 'Serverless' : 'Local'}`);
+    console.log(`🔗 Name.com API: ${namecomAPI ? 'Configured' : 'Not configured (using mock data)'}`);
+    console.log(`🐛 Error logging: Enhanced with comprehensive details`);
   });
 }
 

@@ -66,8 +66,32 @@ class DomainGenerator {
             });
 
         } catch (error) {
-            console.error('Error generating domains:', error);
-            this.showError('Failed to generate domains. Please try again.');
+            console.error('❌ Error generating domains:', error);
+            
+            // Enhanced error handling with more context
+            let errorMessage = 'Failed to generate domains. Please try again.';
+            
+            if (error.response && error.response.data) {
+                const errorData = error.response.data;
+                errorMessage = errorData.error || errorMessage;
+                
+                // Log detailed error information for troubleshooting
+                console.error('🔍 Detailed error info:', {
+                    status: error.response.status,
+                    statusText: error.response.statusText,
+                    errorData: errorData,
+                    niche: niche,
+                    timestamp: new Date().toISOString()
+                });
+                
+                // In development, show debug info
+                if (errorData.debug) {
+                    console.error('🐛 Debug information:', errorData.debug);
+                    errorMessage += `\n\nDEBUG INFO:\nEndpoint: ${errorData.debug.endpoint}\nTimestamp: ${errorData.debug.timestamp}\nError: ${errorData.debug.errorMessage}`;
+                }
+            }
+            
+            this.showError(errorMessage);
         }
     }
 
@@ -104,8 +128,32 @@ class DomainGenerator {
             });
 
         } catch (error) {
-            console.error('Error generating more domains:', error);
-            alert('Failed to generate more domains. Please try again.');
+            console.error('❌ Error generating more domains:', error);
+            
+            // Enhanced error handling with more context
+            let errorMessage = 'Failed to generate more domains. Please try again.';
+            
+            if (error.response && error.response.data) {
+                const errorData = error.response.data;
+                errorMessage = errorData.error || errorMessage;
+                
+                // Log detailed error information for troubleshooting
+                console.error('🔍 Detailed error info:', {
+                    status: error.response.status,
+                    statusText: error.response.statusText,
+                    errorData: errorData,
+                    niche: this.currentNiche,
+                    excludedDomains: Array.from(this.usedDomains),
+                    timestamp: new Date().toISOString()
+                });
+                
+                // In development, show debug info
+                if (errorData.debug) {
+                    console.error('🐛 Debug information:', errorData.debug);
+                }
+            }
+            
+            alert(errorMessage);
         } finally {
             generateMoreBtn.innerHTML = originalText;
             generateMoreBtn.disabled = false;
