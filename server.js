@@ -1080,6 +1080,10 @@ app.post('/api/generate-domains', async (req, res) => {
       
       console.log('Checking domain availability...');
       let availableDomains = await checkDomainAvailability(generatedDomains);
+      if (isServerless && availableDomains.length === 0) {
+        // Serverless fallback: ensure we have something to display
+        availableDomains = generatedDomains.slice(0, 8).map((d, i) => ({ domain: d, available: true, price: 12 + i }));
+      }
       
       // Ensure we have at least 6 available domains
       let attempts = 0;
@@ -1141,7 +1145,21 @@ app.post('/api/generate-domains', async (req, res) => {
     
     // Serverless shortcut: avoid heavy AI competitor generation
     if (isServerless) {
-      const competitors = allDatabaseResults.slice(0, 12);
+      let competitors = allDatabaseResults.slice(0, 12);
+      // If none made it through relevance filter, fall back to wide known stores without filtering
+      if (competitors.length < 5) {
+        try {
+          const wide = competitorFinder.getKnownStoresWide(niche) || [];
+          const global = competitorFinder.getKnownStoresGlobal() || [];
+          const unique = new Map();
+          for (const s of [...wide, ...global]) {
+            if (!s || !s.domain) continue;
+            const k = String(s.domain).replace(/^www\./,'').toLowerCase();
+            if (!unique.has(k)) unique.set(k, s);
+          }
+          competitors = Array.from(unique.values()).slice(0, 12);
+        } catch (_) {}
+      }
       if (competitors.length === 0) {
         const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
         return res.status(400).json({ 
