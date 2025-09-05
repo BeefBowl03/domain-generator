@@ -249,7 +249,83 @@ class CompetitorFinder {
             'mancave': ['man cave', 'den', 'entertainment', 'game room', 'home theater', 'basement'],
             // Map common synonyms so non-DB niches find neighbors
             'electronics': ['gadgets', 'tech', 'consumer electronics', 'smart devices', 'home electronics', 'audio video'],
-            'gadgets': ['electronics', 'tech gadgets', 'consumer electronics', 'smart devices']
+            'gadgets': ['electronics', 'tech gadgets', 'consumer electronics', 'smart devices'],
+            // Landscape synonyms should route to backyard/outdoor ecosystems
+            'landscape': ['backyard', 'outdoor', 'garden', 'yard', 'lawn', 'patio', 'deck', 'landscaping'],
+            'landscaping': ['backyard', 'outdoor', 'garden', 'yard', 'lawn', 'patio', 'deck', 'landscape'],
+
+            // Database-driven type words → canonical niches
+            // Backyard cluster
+            'bbq': ['barbecue', 'grill', 'grilling', 'smoker', 'fire'],
+            'barbecue': ['bbq', 'grill', 'smoker', 'outdoor cooking', 'fire'],
+            'fire': ['firepit', 'flame', 'hearth', 'backyard'],
+            'pool': ['spa', 'hot tub', 'swim', 'deck', 'patio', 'backyard'],
+            'garden': ['landscape', 'lawn', 'plant', 'yard', 'outdoor'],
+            'yard': ['lawn', 'garden', 'landscape', 'backyard'],
+            'mower': ['mowing', 'cutting', 'trimmer', 'yard', 'lawn'],
+            'equipment': ['tools', 'machinery', 'gear', 'equipment'],
+            'maintenance': ['care', 'upkeep', 'service', 'maintenance'],
+
+            // Smart home cluster
+            'smart': ['smart home', 'home automation', 'iot', 'connected home', 'tech home'],
+            'home': ['smart home', 'house', 'residence', 'domestic'],
+            'security': ['smart home', 'camera', 'alarm', 'monitoring'],
+            'lighting': ['smart home', 'lights', 'led', 'illumination'],
+            'climate': ['smart home', 'thermostat', 'heating', 'cooling'],
+
+            // Wellness cluster
+            'wellness': ['health', 'wellbeing', 'recovery', 'therapy', 'spa'],
+            'massage': ['wellness', 'therapy', 'relaxation', 'spa'],
+            'sauna': ['wellness', 'steam', 'infrared', 'heat'],
+            'meditation': ['wellness', 'mindfulness', 'zen', 'calm'],
+
+            // Fitness cluster
+            'fitness': ['gym', 'workout', 'exercise', 'training'],
+            'strength': ['fitness', 'weight', 'power', 'muscle'],
+            'cardio': ['fitness', 'running', 'cycling', 'endurance'],
+
+            // Garage cluster
+            'tool': ['garage', 'tools', 'equipment', 'machinery'],
+            'automotive': ['garage', 'car', 'vehicle', 'auto'],
+            'organization': ['garage', 'storage', 'cabinet', 'rack'],
+
+            // Outdoor/adventure cluster
+            'gear': ['outdoor', 'equipment', 'tools', 'apparatus'],
+            'survival': ['outdoor', 'tactical', 'emergency', 'prep'],
+            'recreation': ['outdoor', 'activity', 'sport', 'leisure'],
+
+            // Marine cluster
+            'water': ['marine', 'ocean', 'sea', 'lake'],
+            'fishing': ['marine', 'angling', 'tackle'],
+            'navigation': ['marine', 'gps', 'compass', 'chart'],
+
+            // Horse riding cluster
+            'riding': ['horse riding', 'equestrian', 'horse'],
+            'stable': ['horse riding', 'barn', 'arena', 'paddock'],
+            'training': ['horse riding', 'dressage', 'jumping', 'competition'],
+
+            // Home & living cluster (map to backyard/outdoor or kitchen where useful)
+            'living': ['home decor', 'interior', 'design', 'decor'],
+            'furniture': ['home decor', 'seating', 'table', 'storage'],
+            'comfort': ['home decor', 'luxury', 'premium', 'quality'],
+            'space': ['home decor', 'room', 'area', 'environment'],
+
+            // Biohacking cluster → wellness
+            'biohacking': ['wellness', 'optimization', 'enhancement', 'performance'],
+            'recovery': ['wellness', 'regeneration', 'restoration', 'healing'],
+            'monitoring': ['wellness', 'tracking', 'measurement', 'data'],
+            'enhancement': ['wellness', 'improvement', 'upgrade', 'boost'],
+
+            // E-vehicle cluster → garage/automotive
+            'electric': ['garage', 'ev', 'battery', 'powered'],
+            'vehicle': ['garage', 'car', 'bike', 'scooter'],
+            'charging': ['garage', 'charger', 'station', 'power'],
+            'mobility': ['garage', 'transport', 'travel', 'commute'],
+
+            // Kitchen/appliances cluster
+            'appliance': ['kitchen', 'equipment', 'machine', 'device'],
+            'cooking': ['kitchen', 'baking', 'roasting', 'preparation'],
+            'professional': ['kitchen', 'commercial', 'grade', 'quality']
         };
 
         if (relatedTerms[niche]) {

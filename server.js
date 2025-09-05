@@ -1019,7 +1019,7 @@ app.post('/api/generate-domains', async (req, res) => {
     let competitors = [];
 
     if (Array.isArray(curated) && curated.length > 0) {
-      // If we have curated entries in SQLite for this niche, only use those (verified live + relevant)
+      // If we have curated entries in SQLite for this niche, start with those (verified live + relevant)
       const verified = [];
       const seen = new Set();
       await Promise.all((curated || []).map(async (s) => {
@@ -1034,6 +1034,43 @@ app.post('/api/generate-domains', async (req, res) => {
           seen.add(key);
         } catch (_) {}
       }));
+
+      // Top up to 5 if curated live results are fewer than 5
+      if (verified.length < 5) {
+        // 1) Strict verified search (AI/known) to add missing items
+        try {
+          const strict = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
+          for (const s of (strict || [])) {
+            if (verified.length >= 5) break;
+            const key = String(s.domain || '').replace(/^https?:\/\//,'').replace(/^www\./,'').toLowerCase();
+            if (!key || seen.has(key)) continue;
+            verified.push(s);
+            seen.add(key);
+          }
+        } catch (_) {}
+
+        // 2) If still short, widen to known stores (fast verification + shallow relevance)
+        if (verified.length < 5) {
+          const wide = competitorFinder.getKnownStoresWide(niche) || [];
+          await Promise.all(wide.map(async (c) => {
+            if (verified.length >= 5) return;
+            try {
+              const key = String(c.domain || '').replace(/^https?:\/\//,'').replace(/^www\./,'').toLowerCase();
+              if (!key || seen.has(key)) return;
+              const relevant = await competitorFinder.isRelevantToNiche(c, niche, { checkContent: false });
+              if (!relevant) return;
+              const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true });
+              if (!exists) return;
+              const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
+              if (!qualifies) return;
+              verified.push(c);
+              seen.add(key);
+            } catch (_) {}
+          }));
+        }
+      }
+
+      // Use whatever we have (even if fewer than 5)
       if (verified.length > 0) {
         competitors = verified;
       } else {
