@@ -7,6 +7,117 @@ const OpenAI = require('openai');
 const NameComAPI = require('./namecom-api');
 const CompetitorFinder = require('./competitor-finder');
 const DOMAIN_DATABASES = require('./domain-databases');
+// Centralized Niche Classification System
+class NicheClassifier {
+  constructor(competitorFinder) {
+    this.competitorFinder = competitorFinder;
+    this.knownStores = competitorFinder?.knownStores || {};
+    this.popularNiches = DOMAIN_DATABASES.popularNiches || {};
+  }
+
+  async classifyNiche(inputNiche) {
+    const normalized = this.normalizeNiche(inputNiche);
+    console.log(`🔍 Classifying niche: "${inputNiche}" → "${normalized}"`);
+
+    // Direct match in known stores
+    if (this.knownStores[normalized]) {
+      console.log(`✅ Direct match in known stores: "${normalized}"`);
+      return { type: 'known', canonicalNiche: normalized, confidence: 1.0, source: 'direct_match' };
+    }
+
+    // Direct match in popular niches
+    if (this.popularNiches[normalized]) {
+      console.log(`✅ Direct match in popular niches: "${normalized}"`);
+      return { type: 'known', canonicalNiche: normalized, confidence: 1.0, source: 'popular_niche' };
+    }
+
+    // Check aliases and synonyms
+    const aliasMatch = this.findAliasMatch(normalized);
+    if (aliasMatch) {
+      console.log(`✅ Alias match: "${normalized}" → "${aliasMatch.canonical}"`);
+      return { type: 'known', canonicalNiche: aliasMatch.canonical, confidence: aliasMatch.confidence, source: 'alias_match' };
+    }
+
+    // Check fuzzy matches
+    const fuzzyMatch = this.findFuzzyMatch(normalized);
+    if (fuzzyMatch && fuzzyMatch.confidence > 0.7) {
+      console.log(`✅ Fuzzy match: "${normalized}" → "${fuzzyMatch.canonical}" (${fuzzyMatch.confidence})`);
+      return { type: 'known', canonicalNiche: fuzzyMatch.canonical, confidence: fuzzyMatch.confidence, source: 'fuzzy_match' };
+    }
+
+    // Unknown niche
+    console.log(`🆕 Unknown niche detected: "${normalized}"`);
+    return { type: 'unknown', canonicalNiche: normalized, confidence: 1.0, source: 'unknown' };
+  }
+
+  normalizeNiche(input) {
+    return String(input || '').toLowerCase().trim().replace(/\s+/g, ' ').replace(/[^\w\s-]/g, '');
+  }
+
+  findAliasMatch(normalized) {
+    // Check popular niche synonyms
+    for (const [canonical, data] of Object.entries(this.popularNiches)) {
+      if (data.synonyms && Array.isArray(data.synonyms)) {
+        const synonyms = data.synonyms.map(s => this.normalizeNiche(s));
+        if (synonyms.includes(normalized)) return { canonical, confidence: 0.95 };
+      }
+    }
+
+    // Hardcoded aliases
+    const aliases = {
+      'bbq': 'backyard', 'grilling': 'backyard', 'outdoor cooking': 'backyard', 'patio': 'backyard',
+      'spa': 'wellness', 'relaxation': 'wellness', 'health': 'wellness',
+      'horses': 'horse riding', 'equine': 'horse riding', 'riding': 'horse riding',
+      'boats': 'marine', 'boating': 'marine', 'nautical': 'marine', 'water sports': 'marine',
+      'home automation': 'smart home', 'iot': 'smart home', 'smart tech': 'smart home',
+      'workout': 'fitness', 'exercise': 'fitness', 'gym': 'fitness', 'training': 'fitness',
+      'drones': 'drone', 'uav': 'drone', 'quadcopter': 'drone'
+    };
+
+    return aliases[normalized] ? { canonical: aliases[normalized], confidence: 0.9 } : null;
+  }
+
+  findFuzzyMatch(normalized) {
+    const words = normalized.split(' ');
+    let bestMatch = null;
+    let bestScore = 0;
+
+    const allNiches = [...Object.keys(this.knownStores), ...Object.keys(this.popularNiches)];
+    
+    for (const niche of allNiches) {
+      const score = this.calculateWordOverlap(words, niche.split(' '));
+      if (score > bestScore && score > 0.5) {
+        bestScore = score;
+        bestMatch = niche;
+      }
+    }
+
+    return bestMatch ? { canonical: bestMatch, confidence: bestScore } : null;
+  }
+
+  calculateWordOverlap(words1, words2) {
+    const set1 = new Set(words1);
+    const set2 = new Set(words2);
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    const union = new Set([...set1, ...set2]);
+    return intersection.size / union.size;
+  }
+
+  getSimilarNiches(inputNiche, limit = 5) {
+    const normalized = this.normalizeNiche(inputNiche);
+    const words = normalized.split(' ');
+    const similarities = [];
+    
+    const allNiches = [...Object.keys(this.knownStores), ...Object.keys(this.popularNiches)];
+    
+    for (const niche of allNiches) {
+      const score = this.calculateWordOverlap(words, niche.split(' '));
+      if (score > 0.2) similarities.push({ niche, score });
+    }
+    
+    return similarities.sort((a, b) => b.score - a.score).slice(0, limit).map(item => item.niche);
+  }
+}
 require('dotenv').config();
 
 const app = express();
@@ -31,6 +142,7 @@ const namecomAPI = process.env.NAMECOM_USERNAME && process.env.NAMECOM_TOKEN
 
 // Initialize Competitor Finder with OpenAI API key for real-time generation
 const competitorFinder = new CompetitorFinder(process.env.OPENAI_API_KEY);
+const nicheClassifier = new NicheClassifier(competitorFinder);
 
 // Initialize database (SQLite for local, in-memory for Vercel)
 let db = null;
@@ -1313,63 +1425,7 @@ app.post('/api/niche', async (req, res) => {
   }
 });
 
-// Check if a niche is unknown (not found in our databases)
-function isUnknownNiche(niche) {
-  const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
-  
-  // Check if it exists in known stores
-  if (competitorFinder.knownStores && competitorFinder.knownStores[normalizedNiche]) {
-    return false;
-  }
-  
-  // Check if it exists in popular niches
-  if (DOMAIN_DATABASES.popularNiches && DOMAIN_DATABASES.popularNiches[normalizedNiche]) {
-    return false;
-  }
-  
-  // Check if it can be mapped to a known niche via synonyms
-  try {
-    const popular = DOMAIN_DATABASES.popularNiches || {};
-    const lower = normalizedNiche.toLowerCase();
-    for (const key of Object.keys(popular)) {
-      const syns = Array.isArray(popular[key].synonyms) ? popular[key].synonyms : [];
-      const phrases = new Set([key, ...syns].map(s => String(s || '').toLowerCase().trim()));
-      if (phrases.has(lower)) return false;
-    }
-  } catch (_) {}
-  
-  // Use the same logic as mapToCanonicalNicheSafe but only check if it CAN be mapped
-  // If it can be mapped to a known niche, it's not unknown
-  try {
-    if (competitorFinder && typeof competitorFinder.mapToCanonicalNicheSafe === 'function') {
-      // Temporarily call the mapping function to see if it would map to something different
-      // This ensures consistency between unknown detection and mapping
-      const testMapped = competitorFinder.normalizeNiche(normalizedNiche);
-      
-      // Check curated alias map (same as in mapToCanonicalNicheSafe)
-      const aliasToCanonical = {
-        'fire pit': 'backyard', 'firepit': 'backyard', 'fire pits': 'backyard',
-        'bbq': 'backyard', 'grill': 'backyard', 'grilling': 'backyard',
-        'outdoor kitchen': 'backyard', 'garden': 'backyard', 'patio': 'backyard',
-        'home theater': 'man cave', 'home theatre': 'man cave', 'mancave': 'man cave',
-        'saunas': 'sauna', 'pizza ovens': 'pizza oven', 'exercise equipment': 'exercise equipment',
-        'home gym': 'fitness', 'strength': 'fitness', 'muscle': 'fitness', 'cardio': 'fitness',
-        'hvac': 'hvac', 'air conditioner': 'hvac', 'air conditioning': 'hvac',
-        'drones': 'drones', 'drone': 'drones', 'generators': 'generators', 'generator': 'generators',
-        'horse riding': 'horse riding', 'equestrian': 'horse riding', 'safes': 'safes', 'safe': 'safes',
-        'solar': 'solar', 'wellness': 'wellness', 'health': 'wellness', 'recovery': 'wellness',
-        'therapy': 'wellness', 'massage': 'wellness', 'meditation': 'wellness', 'kitchen': 'kitchen'
-      };
-      
-      const canonical = aliasToCanonical[testMapped] || null;
-      if (canonical && competitorFinder.knownStores && competitorFinder.knownStores[canonical]) {
-        return false; // Can be mapped, so not unknown
-      }
-    }
-  } catch (_) {}
-  
-  return true;
-}
+// OLD isUnknownNiche function removed - replaced by centralized NicheClassifier
 
 // Handle unknown niche workflow
 async function handleUnknownNiche(niche) {
@@ -1755,38 +1811,28 @@ app.post('/api/generate-domains', async (req, res) => {
   const { niche } = req.body;
   
   try {
-    console.log(`🔍 Searching for competitors for niche: ${niche}`);
+    console.log(`🔍 Processing niche request: ${niche}`);
 
-    const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
+    // STEP 1: Classify the niche using our centralized system
+    const classification = await nicheClassifier.classifyNiche(niche);
+    const canonicalNiche = classification.canonicalNiche;
     
-    // Check if this is an unknown niche
-    if (isUnknownNiche(normalizedNiche)) {
-      console.log(`🆕 Detected unknown niche: "${niche}"`);
+    console.log(`🎯 Niche classification: ${classification.type} (confidence: ${classification.confidence}) → "${canonicalNiche}"`);
+
+    // STEP 2: Handle based on classification
+    if (classification.type === 'unknown') {
+      console.log(`🆕 Processing unknown niche: "${canonicalNiche}"`);
       try {
-        const unknownNicheResult = await handleUnknownNiche(normalizedNiche);
+        const unknownNicheResult = await handleUnknownNiche(canonicalNiche);
         return res.json(unknownNicheResult);
       } catch (error) {
         console.error(`❌ Unknown niche processing failed:`, error);
-        // Fall back to normal processing if unknown niche handling fails
+        return res.status(500).json({ 
+          error: `Unable to process unknown niche "${niche}". Please try a more specific search term.`,
+          suggestion: 'Try searching for a more specific product category or industry.'
+        });
       }
     }
-    
-    // Use EXACT normalized niche only; no fuzzy mapping to avoid unrelated categories
-    // Map to canonical niche only through strict, deterministic routing
-    const canonicalNiche = await (async function() {
-      try {
-        if (competitorFinder && typeof competitorFinder.mapToCanonicalNicheSafe === 'function') {
-          const mapped = await competitorFinder.mapToCanonicalNicheSafe(normalizedNiche);
-          if (mapped !== normalizedNiche) {
-            console.log(`🎯 Niche mapping: "${normalizedNiche}" → "${mapped}"`);
-          }
-          return mapped;
-        }
-      } catch (error) {
-        console.log(`❌ Niche mapping error:`, error.message);
-      }
-      return normalizedNiche;
-    })();
     
     // STEP 1: Check database first for similar/related niches - RETURN IMMEDIATELY if found
     console.log(`📊 Checking database for existing competitors...`);
@@ -2126,11 +2172,11 @@ app.post('/api/generate-domains', async (req, res) => {
       } catch (_) {}
 
       if (competitors.length === 0) {
-        const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
+        const similarNiches = nicheClassifier.getSimilarNiches(niche, 10);
         return res.status(400).json({ 
           error: `Unable to find dropshipping competitors for "${niche}" on serverless environment.`,
           suggestion: `Try a broader niche term.`,
-          availableNiches
+          availableNiches: similarNiches
         });
       }
 
@@ -2228,11 +2274,11 @@ app.post('/api/generate-domains', async (req, res) => {
     
     // Ensure we have at least 1 store (as requested)
     if (competitors.length === 0) {
-    const availableNiches = Object.keys(DOMAIN_DATABASES.popularNiches || {});
+      const similarNiches = nicheClassifier.getSimilarNiches(niche, 10);
       return res.status(400).json({ 
         error: `Unable to find dropshipping competitors for "${niche}". This could be because the niche is too specific or the AI couldn't find relevant high-ticket dropshipping stores.`,
         suggestion: `Try a broader niche term.`,
-        availableNiches
+        availableNiches: similarNiches
       });
     }
     
@@ -2739,3 +2785,4 @@ if (!isServerless) {
 }
 
 module.exports = app;
+
