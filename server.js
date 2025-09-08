@@ -171,12 +171,14 @@ async function quickVerifyStores(stores, niche, limit = 12) {
               verified.push(c);
               return;
             }
+            // If known store doesn't exist, don't process it further
+            return;
           }
           
           // For other stores, apply full verification (silent for AI-generated)
           const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true, silentFail: true, isAIGenerated: true });
           if (!exists) return;
-          const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: isKnownStore });
+          const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: false });
           if (!qualifies) return;
           const relevant = await competitorFinder.isRelevantToNiche(c, niche, { checkContent: false });
           if (!relevant) return;
