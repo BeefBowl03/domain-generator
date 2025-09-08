@@ -898,21 +898,23 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
             }
         } catch (_) {}
         
-        // 2d) AI-powered niche mapping analyzer (fallback)
-        try {
-            console.log(`🤖 Trying AI niche mapping for: "${input}"`);
-            const aiMapped = await this.aiAnalyzeNicheMapping(input);
-            if (aiMapped && this.knownStores && this.knownStores[aiMapped]) {
-                console.log(`✅ AI mapped "${input}" → "${aiMapped}"`);
-                return aiMapped;
-            } else if (aiMapped) {
-                console.log(`❌ AI mapped "${input}" → "${aiMapped}" but no stores found for that niche`);
-            } else {
-                console.log(`❌ AI mapping failed for "${input}"`);
-            }
-        } catch (error) {
-            console.log(`❌ AI mapping error for "${input}":`, error.message);
-        }
+        // 2d) AI-powered niche mapping analyzer (DISABLED - conflicts with unknown niche workflow)
+        // This old method tried to force unknown niches into known categories
+        // Now we handle unknown niches separately with dedicated workflow
+        // try {
+        //     console.log(`🤖 Trying AI niche mapping for: "${input}"`);
+        //     const aiMapped = await this.aiAnalyzeNicheMapping(input);
+        //     if (aiMapped && this.knownStores && this.knownStores[aiMapped]) {
+        //         console.log(`✅ AI mapped "${input}" → "${aiMapped}"`);
+        //         return aiMapped;
+        //     } else if (aiMapped) {
+        //         console.log(`❌ AI mapped "${input}" → "${aiMapped}" but no stores found for that niche`);
+        //     } else {
+        //         console.log(`❌ AI mapping failed for "${input}"`);
+        //     }
+        // } catch (error) {
+        //     console.log(`❌ AI mapping error for "${input}":`, error.message);
+        // }
 
         // 3) Use DOMAIN_DATABASES.popularNiches synonyms, but require exact token/phrase match and known stores
         try {

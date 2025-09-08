@@ -32,6 +32,7 @@ class DomainGenerator {
             return;
         }
         this.usedDomains.clear();
+        
         this.showLoading();
 
         try {
@@ -164,6 +165,10 @@ class DomainGenerator {
         document.getElementById('resultsSection').classList.add('hidden');
         document.getElementById('errorSection').classList.add('hidden');
         document.getElementById('loadingSection').classList.remove('hidden');
+        
+        // Reset to original subtitle message
+        const loadingText = document.querySelector('#loadingSection p');
+        loadingText.textContent = 'Finding the perfect domains for your high-ticket dropshipping store';
     }
 
     displayResults(data) {
@@ -184,6 +189,7 @@ class DomainGenerator {
         
         document.getElementById('resultsSection').classList.remove('hidden');
     }
+    
 
     displayCompetitors(competitors) {
         const competitorsList = document.getElementById('competitorsList');
@@ -332,6 +338,7 @@ class DomainGenerator {
         document.getElementById('errorSection').classList.add('hidden');
         document.getElementById('nicheInput').focus();
     }
+    
 
     // Removed recommendations card rendering; Brand Positioning is now shown under patterns
 }

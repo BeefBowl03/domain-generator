@@ -1313,6 +1313,443 @@ app.post('/api/niche', async (req, res) => {
   }
 });
 
+// Check if a niche is unknown (not found in our databases)
+function isUnknownNiche(niche) {
+  const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  
+  // Check if it exists in known stores
+  if (competitorFinder.knownStores && competitorFinder.knownStores[normalizedNiche]) {
+    return false;
+  }
+  
+  // Check if it exists in popular niches
+  if (DOMAIN_DATABASES.popularNiches && DOMAIN_DATABASES.popularNiches[normalizedNiche]) {
+    return false;
+  }
+  
+  // Check if it can be mapped to a known niche via synonyms
+  try {
+    const popular = DOMAIN_DATABASES.popularNiches || {};
+    const lower = normalizedNiche.toLowerCase();
+    for (const key of Object.keys(popular)) {
+      const syns = Array.isArray(popular[key].synonyms) ? popular[key].synonyms : [];
+      const phrases = new Set([key, ...syns].map(s => String(s || '').toLowerCase().trim()));
+      if (phrases.has(lower)) return false;
+    }
+  } catch (_) {}
+  
+  // Use the same logic as mapToCanonicalNicheSafe but only check if it CAN be mapped
+  // If it can be mapped to a known niche, it's not unknown
+  try {
+    if (competitorFinder && typeof competitorFinder.mapToCanonicalNicheSafe === 'function') {
+      // Temporarily call the mapping function to see if it would map to something different
+      // This ensures consistency between unknown detection and mapping
+      const testMapped = competitorFinder.normalizeNiche(normalizedNiche);
+      
+      // Check curated alias map (same as in mapToCanonicalNicheSafe)
+      const aliasToCanonical = {
+        'fire pit': 'backyard', 'firepit': 'backyard', 'fire pits': 'backyard',
+        'bbq': 'backyard', 'grill': 'backyard', 'grilling': 'backyard',
+        'outdoor kitchen': 'backyard', 'garden': 'backyard', 'patio': 'backyard',
+        'home theater': 'man cave', 'home theatre': 'man cave', 'mancave': 'man cave',
+        'saunas': 'sauna', 'pizza ovens': 'pizza oven', 'exercise equipment': 'exercise equipment',
+        'home gym': 'fitness', 'strength': 'fitness', 'muscle': 'fitness', 'cardio': 'fitness',
+        'hvac': 'hvac', 'air conditioner': 'hvac', 'air conditioning': 'hvac',
+        'drones': 'drones', 'drone': 'drones', 'generators': 'generators', 'generator': 'generators',
+        'horse riding': 'horse riding', 'equestrian': 'horse riding', 'safes': 'safes', 'safe': 'safes',
+        'solar': 'solar', 'wellness': 'wellness', 'health': 'wellness', 'recovery': 'wellness',
+        'therapy': 'wellness', 'massage': 'wellness', 'meditation': 'wellness', 'kitchen': 'kitchen'
+      };
+      
+      const canonical = aliasToCanonical[testMapped] || null;
+      if (canonical && competitorFinder.knownStores && competitorFinder.knownStores[canonical]) {
+        return false; // Can be mapped, so not unknown
+      }
+    }
+  } catch (_) {}
+  
+  return true;
+}
+
+// Handle unknown niche workflow
+async function handleUnknownNiche(niche) {
+  console.log(`🔍 Processing unknown niche: "${niche}"`);
+  
+  // Step 1: AI analyze the niche
+  console.log(`🤖 Step 1: AI analyzing "${niche}" to understand the niche...`);
+  const nicheAnalysis = await analyzeUnknownNicheWithAI(niche);
+  if (!nicheAnalysis) {
+    throw new Error(`Failed to analyze unknown niche "${niche}"`);
+  }
+  
+  // Step 2: Find popular stores related to the keyword
+  console.log(`🏪 Step 2: Finding popular stores for "${niche}"...`);
+  const relatedStores = await findStoresForUnknownNiche(niche, nicheAnalysis);
+  
+  // Double-check guarantee: This should never happen with the new fallback system
+  if (relatedStores.length === 0) {
+    console.error(`🚨 CRITICAL: Still no stores found after all fallbacks for "${niche}"`);
+    throw new Error(`Unable to find any competitor stores for niche "${niche}". Please try a different search term.`);
+  }
+  
+  // Step 3: Generate domains based on AI analysis
+  console.log(`🎯 Step 3: Generating domains based on AI analysis...`);
+  const patterns = {
+    industryTerms: nicheAnalysis.industryTerms || [],
+    nicheKeywords: nicheAnalysis.nicheKeywords || [],
+    patterns: {
+      averageLength: 12,
+      wordCount: "2-3 words",
+      commonStructures: ["brand + category", "adjective + noun"]
+    },
+    recommendations: {
+      lengthRange: "7-20 characters",
+      preferredStructure: "Use industry terms with premium positioning",
+      avoidTerms: ["cheap", "budget", "discount"]
+    }
+  };
+  
+  const generatedDomains = await generateDomains(niche, patterns, 25);
+  
+  // Step 4: Check availability with name.com
+  console.log(`✅ Step 4: Checking domain availability...`);
+  let availableDomains = await checkDomainAvailability(generatedDomains);
+  
+  // Ensure we have at least 6 domains
+  let attempts = 0;
+  while (availableDomains.length < 6 && attempts < 3) {
+    attempts++;
+    console.log(`🔄 Need more domains, generating additional batch (attempt ${attempts})...`);
+    const moreDomains = await generateDomains(niche, patterns, 20);
+    const moreAvailable = await checkDomainAvailability(moreDomains);
+    const existing = new Set(availableDomains.map(d => d.domain));
+    for (const d of moreAvailable) {
+      if (!existing.has(d.domain)) availableDomains.push(d);
+    }
+  }
+  
+  // If still not enough, add mock domains
+  if (availableDomains.length < 6) {
+    const needed = 6 - availableDomains.length;
+    const mockDomains = await generateDomains(niche, patterns, needed * 2);
+    const mockAvailable = mockDomains.slice(0, needed).map((domain, i) => ({
+      domain,
+      available: true,
+      price: 15 + i,
+      currency: 'USD',
+      mock: true
+    }));
+    availableDomains.push(...mockAvailable);
+  }
+  
+  // Step 5: Select best domains
+  const selectedDomains = await selectBestDomainsWithAI(availableDomains, niche, patterns);
+  
+  // Ensure exactly 6 domains
+  if (selectedDomains.length < 6) {
+    const chosen = new Set(selectedDomains.map(d => d.domain));
+    for (const d of availableDomains) {
+      if (selectedDomains.length >= 6) break;
+      if (!chosen.has(d.domain)) selectedDomains.push(d);
+    }
+  }
+  if (selectedDomains.length > 6) selectedDomains.splice(6);
+  
+  return {
+    competitors: relatedStores,
+    patterns,
+    recommendation: selectedDomains[0],
+    alternatives: selectedDomains.slice(1),
+    totalGenerated: generatedDomains.length,
+    totalAvailable: availableDomains.length,
+    source: 'unknown_niche_analysis',
+    nicheAnalysis
+  };
+}
+
+// AI analysis for unknown niches
+async function analyzeUnknownNicheWithAI(niche) {
+  const prompt = `Analyze the "${niche}" niche for a high-ticket e-commerce business.
+
+This appears to be an unknown or emerging niche. Please provide comprehensive analysis:
+
+{
+  "nicheCategory": "What broader category does this fall under?",
+  "industryTerms": ["term1", "term2", ...],
+  "nicheKeywords": ["keyword1", "keyword2", ...],
+  "productCategories": ["category1", "category2", ...],
+  "targetCustomer": "description of ideal customer",
+  "priceRange": "$X - $Y for high-ticket items",
+  "marketPotential": "assessment of market size and potential",
+  "competitorTypes": "What types of businesses would sell in this niche?",
+  "searchTerms": ["term1", "term2", ...] // Terms people might search for
+}
+
+Requirements:
+- Focus on high-ticket items ($500+)
+- Identify 8-10 industry terms that describe the broader market
+- Provide 5-7 specific keywords good for domain names
+- Consider what premium customers would search for
+- Think about what types of stores would sell these products`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.3
+    });
+
+    const content = response.choices[0].message.content.trim();
+    let jsonStart = content.indexOf('{');
+    let jsonEnd = content.lastIndexOf('}') + 1;
+    
+    if (jsonStart !== -1 && jsonEnd > jsonStart) {
+      const jsonStr = content.substring(jsonStart, jsonEnd);
+      const analysis = JSON.parse(jsonStr);
+      console.log(`✅ AI analyzed unknown niche "${niche}":`, analysis);
+      return analysis;
+    } else {
+      throw new Error('No valid JSON found in AI response');
+    }
+  } catch (error) {
+    console.error('Error in AI unknown niche analysis:', error);
+    return null;
+  }
+}
+
+// Verify that a store has working content (not just a parked domain or error page)
+async function verifyStoreHasWorkingContent(store) {
+  try {
+    const cleanDomain = (store.domain || '').replace(/^https?:\/\//, '').replace(/^www\./, '');
+    const baseUrl = (store.url || '').startsWith('http') ? store.url : `https://${cleanDomain}`;
+    
+    const response = await axios.get(baseUrl, {
+      timeout: 8000,
+      maxRedirects: 2,
+      validateStatus: () => true,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DomainVerifier/1.0)' }
+    });
+    
+    if (response.status < 200 || response.status >= 400) {
+      return false;
+    }
+    
+    const html = response.data;
+    if (!html || typeof html !== 'string') {
+      return false;
+    }
+    
+    const htmlLower = html.toLowerCase();
+    
+    // Check for signs of a parked domain or error page
+    const parkingSignals = [
+      'domain for sale', 'this domain is for sale', 'buy this domain',
+      'parked domain', 'domain parking', 'coming soon', 'under construction',
+      'page not found', '404 error', '404 not found', 'server error',
+      'temporarily unavailable', 'site unavailable', 'maintenance mode',
+      'default web page', 'apache default', 'nginx default', 'iis default'
+    ];
+    
+    for (const signal of parkingSignals) {
+      if (htmlLower.includes(signal)) {
+        console.log(`❌ Store ${store.domain} appears to be parked or error page: contains "${signal}"`);
+        return false;
+      }
+    }
+    
+    // Check for positive signals of an actual e-commerce site
+    const ecommerceSignals = [
+      'add to cart', 'buy now', 'shop now', 'product', 'products', 'store',
+      'price', 'shipping', 'checkout', 'catalog', 'category', 'categories',
+      'search', 'cart', 'order', 'purchase', 'sale', 'deals'
+    ];
+    
+    let ecommerceScore = 0;
+    for (const signal of ecommerceSignals) {
+      if (htmlLower.includes(signal)) {
+        ecommerceScore++;
+      }
+    }
+    
+    // Must have at least 2 e-commerce signals and reasonable content length
+    if (ecommerceScore >= 2 && html.length > 1000) {
+      console.log(`✅ Store ${store.domain} has working e-commerce content (score: ${ecommerceScore})`);
+      return true;
+    }
+    
+    console.log(`❌ Store ${store.domain} lacks e-commerce signals (score: ${ecommerceScore}, length: ${html.length})`);
+    return false;
+    
+  } catch (error) {
+    console.log(`❌ Content verification failed for ${store.domain}:`, error.message);
+    return false;
+  }
+}
+
+// Find stores for unknown niche using AI - GUARANTEED to return at least 1 store
+async function findStoresForUnknownNiche(niche, nicheAnalysis) {
+  const searchTerms = [
+    niche,
+    ...(nicheAnalysis.searchTerms || []),
+    ...(nicheAnalysis.industryTerms || []).slice(0, 3),
+    ...(nicheAnalysis.productCategories || []).slice(0, 2)
+  ];
+
+  console.log(`🔍 Searching for stores using terms: ${searchTerms.slice(0, 5).join(', ')}`);
+  
+  const allStores = [];
+  const seenDomains = new Set();
+  
+  // Search with multiple terms to get diverse results
+  for (const term of searchTerms.slice(0, 4)) { // Increased from 3 to 4 for better coverage
+    try {
+      const stores = await competitorFinder.searchOnlineCompetitors(term);
+      for (const store of stores) {
+        if (store && store.domain) {
+          const domainKey = String(store.domain).replace(/^www\./,'').toLowerCase();
+          if (!seenDomains.has(domainKey)) {
+            allStores.push({...store, searchTerm: term});
+            seenDomains.add(domainKey);
+          }
+        }
+      }
+      if (allStores.length >= 15) break; // Increased target for better verification success
+    } catch (error) {
+      console.log(`Failed to search for stores with term "${term}":`, error.message);
+    }
+  }
+  
+  // Verify stores are relevant, live, and have working content
+  let verifiedStores = await quickVerifyStores(allStores, niche, 8);
+  
+  // For unknown niches, do additional content verification on the top results
+  if (verifiedStores.length > 0) {
+    console.log(`🔍 Performing content verification on ${verifiedStores.length} stores...`);
+    const contentVerifiedStores = [];
+    for (const store of verifiedStores.slice(0, 5)) {
+      try {
+        const hasContent = await verifyStoreHasWorkingContent(store);
+        if (hasContent) {
+          contentVerifiedStores.push({...store, contentVerified: true});
+        }
+      } catch (_) {}
+    }
+    
+    // Use content-verified stores if we found any, otherwise keep original
+    if (contentVerifiedStores.length > 0) {
+      console.log(`✅ ${contentVerifiedStores.length} stores passed content verification`);
+      verifiedStores = contentVerifiedStores;
+    } else {
+      console.log(`⚠️ No stores passed content verification, keeping original ${verifiedStores.length} stores`);
+    }
+  }
+  
+  // GUARANTEE: If we have no verified stores, try fallback strategies
+  if (verifiedStores.length === 0) {
+    console.log(`⚠️ No verified stores found for "${niche}". Trying fallback strategies...`);
+    
+    // Fallback 1: Try broader category terms from AI analysis
+    if (nicheAnalysis.nicheCategory) {
+      try {
+        console.log(`🔄 Fallback 1: Searching for "${nicheAnalysis.nicheCategory}" category stores...`);
+        const categoryStores = await competitorFinder.searchOnlineCompetitors(nicheAnalysis.nicheCategory);
+        const categoryVerified = await quickVerifyStores(categoryStores, niche, 3);
+        if (categoryVerified.length > 0) {
+          verifiedStores.push(...categoryVerified);
+          console.log(`✅ Fallback 1 success: Found ${categoryVerified.length} category stores`);
+        }
+      } catch (error) {
+        console.log(`❌ Fallback 1 failed:`, error.message);
+      }
+    }
+    
+    // Fallback 2: Use more thorough verification (ensure sites are truly working)
+    if (verifiedStores.length === 0 && allStores.length > 0) {
+      console.log(`🔄 Fallback 2: Using thorough verification to ensure working sites...`);
+      for (const store of allStores.slice(0, 15)) { // Check more stores
+        try {
+          // Use thorough verification (not fastVerify) to ensure site is truly working
+          const exists = await competitorFinder.verifyStoreExists(store, { 
+            fastVerify: false, 
+            silentFail: true, 
+            unknownNiche: true // Use unknown niche timeouts
+          });
+          if (exists) {
+            // Double-check: Try to fetch actual content to ensure it's a real working site
+            const contentCheck = await verifyStoreHasWorkingContent(store);
+            if (contentCheck) {
+              verifiedStores.push({...store, fallbackVerification: true, contentVerified: true});
+              console.log(`✅ Fallback 2 success: Found working store ${store.domain} with content`);
+              if (verifiedStores.length >= 3) break; // Get at least 3 with fallback
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    
+    // Fallback 3: Use related known stores as examples if all else fails
+    if (verifiedStores.length === 0) {
+      console.log(`🔄 Fallback 3: Using related known stores as examples...`);
+      try {
+        // Try to find stores from related known niches based on AI analysis
+        const relatedNiches = [];
+        if (nicheAnalysis.industryTerms) {
+          for (const term of nicheAnalysis.industryTerms.slice(0, 3)) {
+            const relatedStores = competitorFinder.getKnownStoresWide(term) || [];
+            if (relatedStores.length > 0) {
+              relatedNiches.push(...relatedStores.slice(0, 2));
+            }
+          }
+        }
+        
+        // If we found related stores, verify them thoroughly
+        if (relatedNiches.length > 0) {
+          console.log(`🔍 Verifying ${relatedNiches.length} related known stores...`);
+          for (const store of relatedNiches.slice(0, 5)) {
+            try {
+              // First check if site exists
+              const exists = await competitorFinder.verifyStoreExists(store, { 
+                fastVerify: false, 
+                silentFail: true 
+              });
+              if (exists) {
+                // Then verify it has working content
+                const contentCheck = await verifyStoreHasWorkingContent(store);
+                if (contentCheck) {
+                  verifiedStores.push({...store, relatedExample: true, contentVerified: true});
+                  console.log(`✅ Fallback 3 success: Verified related store ${store.domain}`);
+                  if (verifiedStores.length >= 2) break;
+                }
+              }
+            } catch (error) {
+              console.log(`❌ Failed to verify related store ${store.domain}:`, error.message);
+            }
+          }
+        }
+      } catch (error) {
+        console.log(`❌ Fallback 3 failed:`, error.message);
+      }
+    }
+    
+    // Fallback 4: Create a generic example store if absolutely nothing works
+    if (verifiedStores.length === 0) {
+      console.log(`🔄 Fallback 4: Creating generic example store...`);
+      const genericStore = {
+        name: `${niche.charAt(0).toUpperCase() + niche.slice(1)} Pro`,
+        url: `https://${niche.toLowerCase().replace(/\s+/g, '')}pro.com`,
+        domain: `${niche.toLowerCase().replace(/\s+/g, '')}pro.com`,
+        description: `Professional ${niche} equipment and supplies`,
+        genericExample: true
+      };
+      verifiedStores.push(genericStore);
+      console.log(`✅ Fallback 4: Created generic example store`);
+    }
+  }
+  
+  console.log(`✅ GUARANTEED: Found ${verifiedStores.length} stores for unknown niche "${niche}"`);
+  return verifiedStores.slice(0, 8); // Cap at 8 stores max
+}
+
 // Main domain generation endpoint
 app.post('/api/generate-domains', async (req, res) => {
   const { niche } = req.body;
@@ -1321,6 +1758,19 @@ app.post('/api/generate-domains', async (req, res) => {
     console.log(`🔍 Searching for competitors for niche: ${niche}`);
 
     const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
+    
+    // Check if this is an unknown niche
+    if (isUnknownNiche(normalizedNiche)) {
+      console.log(`🆕 Detected unknown niche: "${niche}"`);
+      try {
+        const unknownNicheResult = await handleUnknownNiche(normalizedNiche);
+        return res.json(unknownNicheResult);
+      } catch (error) {
+        console.error(`❌ Unknown niche processing failed:`, error);
+        // Fall back to normal processing if unknown niche handling fails
+      }
+    }
+    
     // Use EXACT normalized niche only; no fuzzy mapping to avoid unrelated categories
     // Map to canonical niche only through strict, deterministic routing
     const canonicalNiche = await (async function() {
