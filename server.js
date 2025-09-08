@@ -707,17 +707,24 @@ async function generateDomains(niche, patterns, count = 20) {
   const validDomains = allDomains.filter(domain => hasCompleteWords(domain));
   console.log(`✅ ${validDomains.length}/${allDomains.length} domains passed complete word validation`);
   
+  // PREMIUM FILTER: Remove cheap-sounding domain names
+  console.log(`🏆 Filtering out cheap-sounding domains...`);
+  const premiumDomains = validDomains.filter(domain => isPremiumDomain(domain));
+  console.log(`✅ ${premiumDomains.length}/${validDomains.length} domains passed premium validation`);
+  
   // If we filtered out too many, generate more to compensate
-  if (validDomains.length < count * 0.7) {
-    console.log(`⚠️  Need more domains with complete words. Generating additional domains...`);
+  if (premiumDomains.length < count * 0.7) {
+    console.log(`⚠️  Need more premium domains. Generating additional domains...`);
     const additionalProfessional = await generateProfessionalDomains(niche, nicheTermsFromDB, nicheKeywords, industryTerms, 5);
     const additionalPoetic = await generatePoeticDomains(niche, nicheTermsFromDB, poeticDescriptors, 5);
-    const additionalValid = [...additionalProfessional, ...additionalPoetic].filter(domain => hasCompleteWords(domain));
-    validDomains.push(...additionalValid);
-    console.log(`📈 Added ${additionalValid.length} more domains with complete words`);
+    const additionalValid = [...additionalProfessional, ...additionalPoetic]
+      .filter(domain => hasCompleteWords(domain))
+      .filter(domain => isPremiumDomain(domain));
+    premiumDomains.push(...additionalValid);
+    console.log(`📈 Added ${additionalValid.length} more premium domains`);
   }
   
-  allDomains = validDomains;
+  allDomains = premiumDomains;
   console.log(`✅ Generated ${professionalDomains.length} professional + ${poeticDomains.length} poetic = ${allDomains.length} total domains`);
   
   return allDomains;
@@ -744,7 +751,7 @@ NICHE KEYWORDS: ${nicheKeywords.join(', ')}
 DOMAIN CREATION STRATEGY:
 1. Use complete ${niche} industry terms: ${industryTerms.slice(0, 3).join(', ')}
 2. Combine with complete prefixes: Pro, Elite, Prime, Lux, Smart, etc.
-3. Add complete suffixes: Pro, Hub, Zone, Direct, Store, etc.
+3. Add complete premium suffixes: Pro, Hub, Zone, Direct, Co, etc.
 4. Create ${niche}-specific brand names using full words only
 
 STRICT CONSTRAINTS:
@@ -762,6 +769,8 @@ INVALID EXAMPLES (DO NOT GENERATE):
 ❌ Prolansk.com (should be ProLandscape.com)  
 ❌ Luxlansk.com (should be LuxLandscape.com)
 ❌ Any domain with partial/truncated words
+❌ CHEAP-SOUNDING DOMAINS: YardStore.com, GardenShop.com, PoolMart.com, FitnessOutlet.com, MarineWarehouse.com
+❌ GENERIC TERMS: QuickYard.com, EasyGarden.com, BudgetPool.com, ValueFitness.com, DiscountMarine.com
 ❌ Any domain that contains the exact word "${niche}" or "${niche.replace(/\s+/g,'')}"
 
 VALIDATION: Each domain must pass this test:
@@ -838,7 +847,9 @@ AVOID:
 - Generic luxury terms unrelated to ${niche}
 - Long compound words
 - Made-up words
- - The exact term "${niche}" or "${niche.replace(/\s+/g,'')}"
+- CHEAP-SOUNDING WORDS: Store, Shop, Mart, Market, Outlet, Warehouse, Depot, Discount, Bargain, Quick, Easy, Budget
+- GENERIC TERMS: Online, Digital, Express, Standard, Basic, Universal, World, Global
+- The exact term "${niche}" or "${niche.replace(/\s+/g,'')}"
 
 Return ONLY a JSON array: ["domain1.com", "domain2.com", ...]`;
 
@@ -891,7 +902,7 @@ function extractDomainsFromResponse(content, maxCount) {
 function generateFallbackProfessionalDomains(niche, nicheTerms, count = 20) {
   const domains = [];
   const completePrefixes = ['Pro', 'Elite', 'Apex', 'Prime', 'Top', 'Best', 'Max', 'Ultra', 'Super'];
-  const completeSuffixes = ['Pro', 'Hub', 'Zone', 'Direct', 'Plus', 'Max', 'Store', 'Shop'];
+  const completeSuffixes = ['Pro', 'Hub', 'Zone', 'Direct', 'Plus', 'Max', 'Co', 'Labs'];
   
   // Use complete niche terms instead of truncated niche
   const completeNicheTerms = [...nicheTerms, niche.replace(/\s+/g, '')];
@@ -918,9 +929,9 @@ function generateFallbackProfessionalDomains(niche, nicheTerms, count = 20) {
     if (domains.length >= count) break;
   }
   
-  // Filter to ensure all domains have complete words
-  const validDomains = domains.filter(domain => hasCompleteWords(domain));
-  console.log(`✅ Fallback generated ${validDomains.length} domains with complete words`);
+  // Filter to ensure all domains have complete words and are premium
+  const validDomains = domains.filter(domain => hasCompleteWords(domain) && isPremiumDomain(domain));
+  console.log(`✅ Fallback generated ${validDomains.length} premium domains with complete words`);
   
   return validDomains.slice(0, count);
 }
@@ -955,9 +966,9 @@ function generateFallbackPoeticDomains(niche, nicheTerms, descriptors, count = 2
     if (domains.length >= count) break;
   }
   
-  // Filter to ensure all domains have complete words
-  const validDomains = domains.filter(domain => hasCompleteWords(domain));
-  console.log(`✅ Fallback poetic generated ${validDomains.length} domains with complete words`);
+  // Filter to ensure all domains have complete words and are premium
+  const validDomains = domains.filter(domain => hasCompleteWords(domain) && isPremiumDomain(domain));
+  console.log(`✅ Fallback poetic generated ${validDomains.length} premium domains with complete words`);
   
   return validDomains.slice(0, count);
 }
@@ -1125,6 +1136,48 @@ function hasCompleteWords(domain) {
     }
   }
   
+  return true;
+}
+
+// Filter out cheap-sounding domain names to maintain premium brand image
+function isPremiumDomain(domain) {
+  const domainName = domain.replace(/\.com$/i, '').toLowerCase();
+  
+  // List of cheap-sounding words that should be avoided in premium domains
+  const cheapWords = [
+    'store', 'shop', 'mart', 'market', 'outlet', 'warehouse', 'depot', 'center',
+    'emporium', 'bazaar', 'plaza', 'mall', 'superstore', 'megastore', 'discount',
+    'bargain', 'deal', 'sale', 'cheap', 'budget', 'value', 'economy', 'express',
+    'quick', 'fast', 'instant', 'easy', 'simple', 'basic', 'standard', 'generic',
+    'wholesale', 'bulk', 'mass', 'general', 'universal', 'common', 'regular'
+  ];
+  
+  // Check if domain contains any cheap-sounding words
+  for (const cheapWord of cheapWords) {
+    if (domainName.includes(cheapWord)) {
+      console.log(`❌ Rejected domain "${domain}" - contains cheap-sounding word: "${cheapWord}"`);
+      return false;
+    }
+  }
+  
+  // Additional pattern checks for cheap-sounding combinations
+  const cheapPatterns = [
+    /\d+(store|shop|mart)$/i,           // Numbers + store/shop/mart (like "24store")
+    /(get|buy|order)(your|my|the)?/i,   // Action words like "getyour", "buymy"
+    /(all|any|every)(thing|one)/i,      // Generic words like "everything", "anyone"
+    /^(the|a|an)[a-z]/i,               // Starting with articles
+    /(world|global|international)$/i,   // Overly broad terms at the end
+    /(online|web|net|digital)$/i        // Generic online terms at the end
+  ];
+  
+  for (const pattern of cheapPatterns) {
+    if (pattern.test(domainName)) {
+      console.log(`❌ Rejected domain "${domain}" - matches cheap pattern: ${pattern}`);
+      return false;
+    }
+  }
+  
+  console.log(`✅ Domain "${domain}" passed premium validation`);
   return true;
 }
 
