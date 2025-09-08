@@ -401,11 +401,13 @@ async function findCompetitorStores(niche) {
 async function analyzeDomainPatterns(competitorDomains, niche) {
   console.log(`🤖 Starting AI analysis for "${niche}" niche...`);
   
-  // Get AI-powered niche analysis (no caching)
+  // Get niche keywords from database first, then AI if needed
   const nicheLower = (niche || '').toLowerCase().trim();
+  const nicheKeywords = await extractNicheKeywords(niche); // This now prioritizes database
+  
+  // Get industry terms (still use AI for broader context)
   const analysis = await analyzeNicheWithAI(niche);
   const industryTerms = (analysis && analysis.industryTerms) ? analysis.industryTerms : await extractIndustryTerms(competitorDomains, niche);
-  const nicheKeywords = (analysis && analysis.nicheKeywords) ? analysis.nicheKeywords : await extractNicheKeywords(niche);
   
   const domains = competitorDomains.map(store => store.domain).join(', ');
   
@@ -686,31 +688,14 @@ function removePrefixesAndSuffixesFromKeywords(niche, keywords = []) {
       cleaned.push(s);
     }
     
-    // FINAL SAFETY: Force all keywords to be premium single words only
-    const premiumWords = new Set([
-      'luxury', 'premium', 'elite', 'exclusive', 'bespoke', 'artisan', 'royal', 'signature',
-      'boutique', 'select', 'premier', 'noble', 'prestige', 'distinguished', 'sovereign',
-      'handcrafted', 'curated', 'refined', 'masterpiece', 'atelier', 'couture', 'deluxe',
-      'opulent', 'exquisite', 'magnificent', 'splendid', 'supreme', 'ultimate', 'grand',
-      'majestic', 'regal', 'imperial', 'executive', 'platinum', 'diamond', 'gold'
-    ]);
-    
-    const cheapWords = new Set([
-      'budget', 'cheap', 'discount', 'sale', 'clearance', 'outlet', 'deal', 'bargain',
-      'wholesale', 'lowcost', 'affordable', 'economy', 'basic', 'standard', 'regular'
-    ]);
-    
-    const processedWords = cleaned
+    // FINAL SAFETY: Force all keywords to be single words only
+    const singleWords = cleaned
       .flatMap(keyword => String(keyword).split(/[,\s]+/)) // Split any remaining phrases
       .map(word => word.trim().toLowerCase())
       .filter(word => word.length > 2 && /^[a-z]+$/.test(word)) // Only single words, letters only
-      .filter(word => !cheapWords.has(word)); // Remove cheap words
+      .slice(0, 8); // Limit to 8 words max
     
-    // Prioritize premium words first, then add others
-    const premiumFound = processedWords.filter(word => premiumWords.has(word));
-    const otherWords = processedWords.filter(word => !premiumWords.has(word));
-    
-    return [...premiumFound, ...otherWords].slice(0, 8); // Limit to 8 words max
+    return singleWords;
   } catch (_) {
     return keywords || [];
   }
@@ -732,21 +717,13 @@ Provide a JSON response with:
 
 Requirements:
 - industryTerms: Broad SINGLE WORDS that describe the entire industry (8-10 single words only)
-- nicheKeywords: PREMIUM SINGLE WORDS only for domain names (5-7 single words, NO PHRASES)
+- nicheKeywords: SINGLE WORDS only for domain names (5-7 single words, NO PHRASES)
 - productCategories: Main product types sold in this niche
 - Focus on high-ticket items ($500+)
 - Avoid overly specific product names
 - Think about what premium customers would search for
 
-CRITICAL: nicheKeywords must be PREMIUM single words only that sound expensive and high-end.
-Examples: ["luxury", "elite", "premium", "exclusive", "bespoke", "artisan", "royal", "signature"] 
-NOT basic words like ["furniture", "decor"] or cheap words like ["budget", "discount", "cheap"]
-
-Focus on words that convey:
-- Exclusivity (elite, exclusive, select, premier)
-- Quality (premium, luxury, artisan, signature, bespoke)
-- Status (royal, noble, prestige, distinguished)
-- Craftsmanship (handcrafted, curated, refined, masterpiece)`;
+CRITICAL: nicheKeywords must be single words only. Examples: ["furniture", "decor", "luxury", "design"] NOT ["luxury furniture", "designer home decor"]`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -763,32 +740,13 @@ Focus on words that convey:
       const jsonStr = content.substring(jsonStart, jsonEnd);
       const analysis = JSON.parse(jsonStr);
       
-      // Force nicheKeywords to be premium single words only
+      // Force nicheKeywords to be single words only
       if (analysis.nicheKeywords && Array.isArray(analysis.nicheKeywords)) {
-        const premiumWords = new Set([
-          'luxury', 'premium', 'elite', 'exclusive', 'bespoke', 'artisan', 'royal', 'signature',
-          'boutique', 'select', 'premier', 'noble', 'prestige', 'distinguished', 'sovereign',
-          'handcrafted', 'curated', 'refined', 'masterpiece', 'atelier', 'couture', 'deluxe',
-          'opulent', 'exquisite', 'magnificent', 'splendid', 'supreme', 'ultimate', 'grand',
-          'majestic', 'regal', 'imperial', 'executive', 'platinum', 'diamond', 'gold'
-        ]);
-        
-        const cheapWords = new Set([
-          'budget', 'cheap', 'discount', 'sale', 'clearance', 'outlet', 'deal', 'bargain',
-          'wholesale', 'lowcost', 'affordable', 'economy', 'basic', 'standard', 'regular'
-        ]);
-        
-        const processedWords = analysis.nicheKeywords
+        analysis.nicheKeywords = analysis.nicheKeywords
           .flatMap(keyword => keyword.split(/[,\s]+/)) // Split on commas and spaces
           .map(word => word.trim().toLowerCase())
           .filter(word => word.length > 2 && /^[a-z]+$/.test(word)) // Only single words, letters only
-          .filter(word => !cheapWords.has(word)); // Remove cheap words
-        
-        // Prioritize premium words first, then add others
-        const premiumFound = processedWords.filter(word => premiumWords.has(word));
-        const otherWords = processedWords.filter(word => !premiumWords.has(word));
-        
-        analysis.nicheKeywords = [...premiumFound, ...otherWords].slice(0, 7);
+          .slice(0, 7); // Limit to 7 words max
       }
       
       return analysis;
@@ -831,16 +789,51 @@ async function extractIndustryTerms(competitorDomains, niche) {
   return Array.from(terms).slice(0, 8);
 }
 
-// Helper function to extract niche keywords (with AI integration)
+// Helper function to extract niche keywords (database first, AI fallback)
 async function extractNicheKeywords(niche) {
-  // First, try to get keywords from AI analysis
+  const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  
+  // First, try to get keywords from database
+  let databaseKeywords = [];
+  
+  // Check strictNicheKeywords first
+  if (DOMAIN_DATABASES.strictNicheKeywords && DOMAIN_DATABASES.strictNicheKeywords[normalizedNiche]) {
+    databaseKeywords = DOMAIN_DATABASES.strictNicheKeywords[normalizedNiche];
+    console.log(`✅ Using strict database keywords for "${niche}":`, databaseKeywords);
+  }
+  // Then check nicheTerms
+  else if (DOMAIN_DATABASES.nicheTerms && DOMAIN_DATABASES.nicheTerms[normalizedNiche]) {
+    databaseKeywords = DOMAIN_DATABASES.nicheTerms[normalizedNiche];
+    console.log(`✅ Using database terms for "${niche}":`, databaseKeywords);
+  }
+  // Check nicheVariations as backup
+  else if (DOMAIN_DATABASES.nicheVariations && DOMAIN_DATABASES.nicheVariations[normalizedNiche]) {
+    databaseKeywords = DOMAIN_DATABASES.nicheVariations[normalizedNiche];
+    console.log(`✅ Using database variations for "${niche}":`, databaseKeywords);
+  }
+  
+  // If we found database keywords, process them to single words and return
+  if (databaseKeywords.length > 0) {
+    const processedKeywords = databaseKeywords
+      .flatMap(keyword => String(keyword).split(/[,\s]+/)) // Split any phrases
+      .map(word => word.trim().toLowerCase())
+      .filter(word => word.length > 2 && /^[a-z]+$/.test(word)) // Only single words, letters only
+      .slice(0, 7); // Limit to 7 words
+    
+    if (processedKeywords.length > 0) {
+      return processedKeywords;
+    }
+  }
+
+  // Fallback to AI analysis if no database keywords found
+  console.log(`🤖 No database keywords found for "${niche}", trying AI analysis...`);
   const aiAnalysis = await analyzeNicheWithAI(niche);
   if (aiAnalysis && aiAnalysis.nicheKeywords) {
     console.log(`✅ AI generated keywords for "${niche}":`, aiAnalysis.nicheKeywords);
     return aiAnalysis.nicheKeywords;
   }
 
-  // Fallback to basic keywords
+  // Final fallback to basic keywords
   console.log(`⚠️  Using fallback keywords for "${niche}"`);
   return [niche.toLowerCase(), 'premium', 'luxury', 'professional'];
 }
@@ -1513,11 +1506,16 @@ async function handleUnknownNiche(niche) {
     throw new Error(`Unable to find any competitor stores for niche "${niche}". Please try a different search term.`);
   }
   
-  // Step 3: Generate domains based on AI analysis
-  console.log(`🎯 Step 3: Generating domains based on AI analysis...`);
+  // Step 3: Generate domains based on analysis (database + AI)
+  console.log(`🎯 Step 3: Generating domains based on analysis...`);
+  
+  // Try to get database keywords first, then fall back to AI keywords
+  const databaseKeywords = await extractNicheKeywords(niche);
+  const finalKeywords = databaseKeywords.length > 0 ? databaseKeywords : (nicheAnalysis.nicheKeywords || []);
+  
   const patterns = {
     industryTerms: nicheAnalysis.industryTerms || [],
-    nicheKeywords: nicheAnalysis.nicheKeywords || [],
+    nicheKeywords: finalKeywords,
     patterns: {
       averageLength: 12,
       wordCount: "2-3 words",
@@ -1609,19 +1607,11 @@ This appears to be an unknown or emerging niche. Please provide comprehensive an
 Requirements:
 - Focus on high-ticket items ($500+)
 - Identify 8-10 SINGLE WORD industry terms that describe the broader market
-- Provide 5-7 PREMIUM SINGLE WORDS only for domain names (NO PHRASES OR MULTI-WORD TERMS)
+- Provide 5-7 SINGLE WORDS only for domain names (NO PHRASES OR MULTI-WORD TERMS)
 - Consider what premium customers would search for
 - Think about what types of stores would sell these products
 
-CRITICAL: nicheKeywords must be PREMIUM single words only that sound expensive and high-end.
-Examples: ["luxury", "elite", "premium", "exclusive", "bespoke", "artisan", "royal", "signature"] 
-NOT basic words like ["furniture", "decor"] or cheap words like ["budget", "discount", "cheap"]
-
-Focus on words that convey:
-- Exclusivity (elite, exclusive, select, premier, boutique)
-- Quality (premium, luxury, artisan, signature, bespoke, refined)
-- Status (royal, noble, prestige, distinguished, sovereign)
-- Craftsmanship (handcrafted, curated, masterpiece, atelier)`;
+CRITICAL: nicheKeywords must be single words only. Examples: ["furniture", "decor", "luxury", "design"] NOT ["luxury furniture", "designer home decor"]`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -1638,32 +1628,13 @@ Focus on words that convey:
       const jsonStr = content.substring(jsonStart, jsonEnd);
       const analysis = JSON.parse(jsonStr);
       
-      // Force nicheKeywords to be premium single words only
+      // Force nicheKeywords to be single words only
       if (analysis.nicheKeywords && Array.isArray(analysis.nicheKeywords)) {
-        const premiumWords = new Set([
-          'luxury', 'premium', 'elite', 'exclusive', 'bespoke', 'artisan', 'royal', 'signature',
-          'boutique', 'select', 'premier', 'noble', 'prestige', 'distinguished', 'sovereign',
-          'handcrafted', 'curated', 'refined', 'masterpiece', 'atelier', 'couture', 'deluxe',
-          'opulent', 'exquisite', 'magnificent', 'splendid', 'supreme', 'ultimate', 'grand',
-          'majestic', 'regal', 'imperial', 'executive', 'platinum', 'diamond', 'gold'
-        ]);
-        
-        const cheapWords = new Set([
-          'budget', 'cheap', 'discount', 'sale', 'clearance', 'outlet', 'deal', 'bargain',
-          'wholesale', 'lowcost', 'affordable', 'economy', 'basic', 'standard', 'regular'
-        ]);
-        
-        const processedWords = analysis.nicheKeywords
+        analysis.nicheKeywords = analysis.nicheKeywords
           .flatMap(keyword => keyword.split(/[,\s]+/)) // Split on commas and spaces
           .map(word => word.trim().toLowerCase())
           .filter(word => word.length > 2 && /^[a-z]+$/.test(word)) // Only single words, letters only
-          .filter(word => !cheapWords.has(word)); // Remove cheap words
-        
-        // Prioritize premium words first, then add others
-        const premiumFound = processedWords.filter(word => premiumWords.has(word));
-        const otherWords = processedWords.filter(word => !premiumWords.has(word));
-        
-        analysis.nicheKeywords = [...premiumFound, ...otherWords].slice(0, 7);
+          .slice(0, 7); // Limit to 7 words max
       }
       
       console.log(`✅ AI analyzed unknown niche "${niche}":`, analysis);

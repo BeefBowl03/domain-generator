@@ -36,7 +36,9 @@ const DOMAIN_DATABASES = {
         'generators': { synonyms: ['generator', 'backup power'] },
         'horse riding': { synonyms: ['equestrian', 'equine', 'horses'] },
         'sauna': { synonyms: ['infrared sauna', 'steam sauna'] },
-        'home theater': { synonyms: ['theater seating', 'projector', 'audio'] }
+        'home theater': { synonyms: ['theater seating', 'projector', 'audio'] },
+        'man cave': { synonyms: ['mancave', 'den', 'retreat', 'hideout', 'sanctuary'] },
+        'mancave': { synonyms: ['man cave', 'den', 'retreat', 'hideout', 'sanctuary'] }
     },
 
     // High-ticket physical product niche keywords (strict list used for UI display)
@@ -166,6 +168,10 @@ const DOMAIN_DATABASES = {
             'Cave', 'Den', 'Retreat', 'Sanctuary', 'Hideout', 'Lounge',
             'Club', 'Bar', 'Game', 'Entertainment'
         ],
+        'mancave': [
+            'Cave', 'Den', 'Retreat', 'Sanctuary', 'Hideout', 'Lounge',
+            'Club', 'Bar', 'Game', 'Entertainment'
+        ],
         'fitness': [
             'Fitness', 'Gym', 'Training', 'Performance', 'Strength', 'Power',
             'Athletic', 'Sport', 'Muscle', 'Endurance'
@@ -291,6 +297,10 @@ const DOMAIN_DATABASES = {
             'Workshop', 'Factory', 'Lab', 'Studio', 'Forge', 'Works'
         ],
         'man cave': [
+            'Dwellers', 'Kings', 'Masters', 'Legends', 'Bros', 'Club',
+            'Hideout', 'Sanctuary', 'Den', 'Lair', 'Fortress', 'Kingdom'
+        ],
+        'mancave': [
             'Dwellers', 'Kings', 'Masters', 'Legends', 'Bros', 'Club',
             'Hideout', 'Sanctuary', 'Den', 'Lair', 'Fortress', 'Kingdom'
         ],
