@@ -667,8 +667,9 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         tryUrls.push(`http://www.${cleanDomain}`);
 
         const fastVerify = !!options.fastVerify;
-        const headTimeout = fastVerify ? 1200 : 5000;
-        const getTimeout = fastVerify ? 2500 : 9000;
+        const isUnknownNiche = !!options.unknownNiche; // More lenient for unknown niches
+        const headTimeout = isUnknownNiche ? 3000 : (fastVerify ? 1200 : 5000);
+        const getTimeout = isUnknownNiche ? 6000 : (fastVerify ? 2500 : 9000);
         const maxRedirects = fastVerify ? 1 : 2;
 
         for (const url of tryUrls) {
@@ -683,7 +684,10 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
                 // Continue trying other variants
             }
         }
-        console.log(`Store not reachable: ${store.name} (${cleanDomain})`);
+        // Only log verification failures for known/database stores to reduce noise
+        if (!options.silentFail && !options.isAIGenerated) {
+            console.log(`Store not reachable: ${store.name} (${cleanDomain})`);
+        }
         return false;
     }
 
@@ -787,12 +791,13 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
     getKnownStoresExact(niche) {
         const n = this.normalizeNiche(niche);
         const list = this.knownStores && this.knownStores[n] ? this.knownStores[n] : [];
+        console.log(`🔍 getKnownStoresExact("${niche}") → normalized: "${n}" → found ${list.length} stores`);
         return Array.isArray(list) ? [...list] : [];
     }
 
     // Safe, deterministic routing of user input to a canonical niche we have stores for.
     // Only maps when we have an explicit synonym/alias, otherwise returns the input.
-    mapToCanonicalNicheSafe(niche) {
+    async mapToCanonicalNicheSafe(niche) {
         const input = this.normalizeNiche(niche);
         if (!input) return input;
 
@@ -884,6 +889,30 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
                 }
             }
         } catch (_) {}
+
+        // 2c) Enhanced keyword-based mapping using domain databases
+        try {
+            const keywordMapped = this.mapNicheUsingDatabaseKeywords(input);
+            if (keywordMapped && this.knownStores && this.knownStores[keywordMapped]) {
+                return keywordMapped;
+            }
+        } catch (_) {}
+        
+        // 2d) AI-powered niche mapping analyzer (fallback)
+        try {
+            console.log(`🤖 Trying AI niche mapping for: "${input}"`);
+            const aiMapped = await this.aiAnalyzeNicheMapping(input);
+            if (aiMapped && this.knownStores && this.knownStores[aiMapped]) {
+                console.log(`✅ AI mapped "${input}" → "${aiMapped}"`);
+                return aiMapped;
+            } else if (aiMapped) {
+                console.log(`❌ AI mapped "${input}" → "${aiMapped}" but no stores found for that niche`);
+            } else {
+                console.log(`❌ AI mapping failed for "${input}"`);
+            }
+        } catch (error) {
+            console.log(`❌ AI mapping error for "${input}":`, error.message);
+        }
 
         // 3) Use DOMAIN_DATABASES.popularNiches synonyms, but require exact token/phrase match and known stores
         try {
@@ -1018,7 +1047,7 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
             // Pass 1: require relevance + high-ticket/dropship
             for (const c of candidates) {
                 try {
-                    const exists = await this.verifyStoreExists(c, { fastVerify: true });
+                    const exists = await this.verifyStoreExists(c, { fastVerify: true, silentFail: options.silentFail });
                     if (!exists) continue;
                     const qualifies = await this.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
                     if (!qualifies) continue;
@@ -1031,7 +1060,7 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
             // Pass 2: drop relevance requirement, keep high-ticket/dropship
             for (const c of candidates) {
                 try {
-                    const exists = await this.verifyStoreExists(c, { fastVerify: true });
+                    const exists = await this.verifyStoreExists(c, { fastVerify: true, silentFail: options.silentFail });
                     if (!exists) continue;
                     const qualifies = await this.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
                     if (!qualifies) continue;
@@ -1042,7 +1071,7 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
             // Pass 3: return first reachable store (quality last resort)
             for (const c of candidates) {
                 try {
-                    const exists = await this.verifyStoreExists(c, { fastVerify: true });
+                    const exists = await this.verifyStoreExists(c, { fastVerify: true, silentFail: options.silentFail });
                     if (exists) return c;
                 } catch (_) {}
             }
@@ -1107,7 +1136,7 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
                 await Promise.all(batch.map(async (c) => {
                     if (verifiedFast.length >= 5 || isTimedOutFast()) return;
                     try {
-                        const exists = await this.verifyStoreExists(c, { fastVerify: true });
+                        const exists = await this.verifyStoreExists(c, { fastVerify: true, silentFail: options.silentFail });
                         if (!exists) return;
                         const qualifies = await this.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
                         if (!qualifies) return;
@@ -1209,7 +1238,7 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
                     if (verified.length >= 5 || isTimedOut()) return;
                     const domainKey = (c.domain || '').replace(/^www\./, '').toLowerCase();
                     try {
-                        const exists = await this.verifyStoreExists(c, { fastVerify: true });
+                        const exists = await this.verifyStoreExists(c, { fastVerify: true, silentFail: options.silentFail });
                         if (!exists) return;
                         const qualifies = await this.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
                         if (qualifies) {
@@ -1225,6 +1254,442 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         }
 
         return verified.slice(0, 5);
+    }
+
+    // Dynamic keyword mapping using ALL data from domain-databases.js
+    mapNicheUsingDatabaseKeywords(searchTerm) {
+        const lower = searchTerm.toLowerCase();
+        const availableNiches = Object.keys(this.knownStores || {});
+        
+        // Build dynamic keyword-to-niche mapping from domain-databases.js
+        const keywordToNicheMap = this.buildKeywordToNicheMapping();
+        
+        console.log(`📊 Built ${Object.keys(keywordToNicheMap).length} keyword mappings from domain-databases.js for "${searchTerm}"`);
+        
+        // Find matching keywords
+        const matches = [];
+        for (const [keyword, targetNiche] of Object.entries(keywordToNicheMap)) {
+            // Only consider niches we actually have stores for
+            if (!availableNiches.includes(targetNiche)) continue;
+            
+            if (keyword.toLowerCase().includes(lower) || lower.includes(keyword.toLowerCase())) {
+                const score = keyword.toLowerCase() === lower ? 20 : 10;
+                matches.push({ keyword, targetNiche, score });
+                console.log(`🔗 Database keyword match: "${lower}" matches "${keyword}" → "${targetNiche}" (score: ${score})`);
+            }
+        }
+        
+        if (matches.length > 0) {
+            // Sort by score (exact matches first, then by target niche)
+            matches.sort((a, b) => b.score - a.score || a.targetNiche.localeCompare(b.targetNiche));
+            const bestMatch = matches[0];
+            console.log(`🎯 Database mapping result: "${searchTerm}" → "${bestMatch.targetNiche}" (score: ${bestMatch.score})`);
+            return bestMatch.targetNiche;
+        }
+        
+        console.log(`❌ No database keyword matches found for "${searchTerm}"`);
+        return null;
+    }
+    
+    // Build comprehensive keyword-to-niche mapping from domain-databases.js
+    buildKeywordToNicheMapping() {
+        const mapping = {};
+        
+        // Mapping from domain-databases categories to our known niches
+        const categoryToKnownNiche = {
+            // Direct matches
+            'backyard': 'backyard',
+            'wellness': 'wellness', 
+            'fitness': 'fitness',
+            'kitchen': 'kitchen',
+            'marine': 'marine',
+            'horse riding': 'horse riding',
+            'smart home': 'smart home',
+            'golf': 'golf',
+            'drone': 'drones',
+            'pizza oven': 'pizza oven',
+            'sauna': 'sauna',
+            
+            // Sub-categories that map to parent niches
+            'bbq': 'backyard',
+            'fire': 'backyard', 
+            'pool': 'backyard',
+            'garden': 'backyard',
+            'yard': 'backyard',
+            'mower': 'backyard',
+            'equipment': 'backyard',
+            'maintenance': 'backyard',
+            
+            'security': 'smart home',
+            'lighting': 'smart home', 
+            'climate': 'smart home',
+            'home': 'smart home',
+            'smart': 'smart home',
+            
+            'massage': 'wellness',
+            'meditation': 'wellness',
+            'recovery': 'wellness',
+            
+            'strength': 'fitness',
+            'cardio': 'fitness',
+            
+            'appliance': 'kitchen',
+            'cooking': 'kitchen',
+            'professional': 'kitchen',
+            
+            'water': 'marine',
+            'fishing': 'marine',
+            'navigation': 'marine',
+            
+            'horse': 'horse riding',
+            'riding': 'horse riding',
+            'stable': 'horse riding',
+            'training': 'horse riding',
+            
+            'garage': 'backyard', // Map garage to backyard since we don't have garage niche
+            'tool': 'backyard',
+            'automotive': 'backyard',
+            'organization': 'backyard',
+            
+            'outdoor': 'backyard', // Map outdoor to backyard
+            'gear': 'backyard',
+            'survival': 'backyard',
+            'recreation': 'backyard',
+            
+            'man cave': 'man cave',
+            
+            'living': 'man cave', // Map home living to man cave
+            'furniture': 'man cave',
+            'comfort': 'man cave', 
+            'space': 'man cave',
+            
+            'biohacking': 'wellness', // Map biohacking to wellness
+            'monitoring': 'wellness',
+            'enhancement': 'wellness',
+            
+            'electric': 'backyard', // Map e-vehicle to backyard (closest match)
+            'vehicle': 'backyard',
+            'charging': 'backyard',
+            'mobility': 'backyard'
+        };
+        
+        // Process all database structures
+        const databases = {
+            strictNicheKeywords: DOMAIN_DATABASES.strictNicheKeywords || {},
+            nicheTerms: DOMAIN_DATABASES.nicheTerms || {},
+            nicheVariations: DOMAIN_DATABASES.nicheVariations || {},
+            popularNiches: DOMAIN_DATABASES.popularNiches || {}
+        };
+        
+        // Extract keywords from each database
+        for (const [dbName, db] of Object.entries(databases)) {
+            for (const [category, data] of Object.entries(db)) {
+                const targetNiche = categoryToKnownNiche[category];
+                if (!targetNiche) continue; // Skip categories we can't map
+                
+                // Handle different data structures
+                let keywords = [];
+                if (Array.isArray(data)) {
+                    keywords = data;
+                } else if (data && data.synonyms && Array.isArray(data.synonyms)) {
+                    keywords = data.synonyms;
+                    // Also add the category name itself
+                    keywords.push(category);
+                } else if (typeof data === 'object' && data !== null) {
+                    // Handle other object structures
+                    keywords = Object.values(data).flat().filter(k => typeof k === 'string');
+                }
+                
+                // Add all keywords to mapping
+                keywords.forEach(keyword => {
+                    if (typeof keyword === 'string' && keyword.trim()) {
+                        mapping[keyword.toLowerCase().trim()] = targetNiche;
+                    }
+                });
+                
+                // Also add the category name itself
+                mapping[category.toLowerCase()] = targetNiche;
+            }
+        }
+        
+        // Add some manual high-priority mappings that might be missed
+        const manualMappings = {
+            'bait': 'marine',
+            'tackle': 'marine', 
+            'rod': 'marine',
+            'thermostat': 'smart home',
+            'zen': 'wellness',
+            'muscle': 'fitness',
+            'projector': 'man cave',
+            'seating': 'man cave',
+            'theater': 'man cave',
+            'theatre': 'man cave',
+            'generator': 'generators',
+            'generators': 'generators',
+            'safe': 'safes',
+            'safes': 'safes',
+            'solar': 'solar',
+            'hvac': 'hvac',
+            'heating': 'hvac',
+            'cooling': 'hvac',
+            'fireplace': 'fireplace'
+        };
+        
+        Object.assign(mapping, manualMappings);
+        
+        return mapping;
+    }
+    
+    
+    // AI-powered niche mapping analyzer (fallback when keyword mapping fails)
+    async aiAnalyzeNicheMapping(searchTerm) {
+        if (!this.openai) return null;
+        
+        try {
+            const availableNiches = Object.keys(this.knownStores || {});
+            console.log(`📊 Available niches for AI mapping:`, availableNiches.join(', '));
+            if (availableNiches.length === 0) return null;
+
+            // Build enhanced context from domain databases
+            const contextExamples = [];
+            for (const niche of availableNiches.slice(0, 8)) {
+                const keywords = DOMAIN_DATABASES.strictNicheKeywords?.[niche] || 
+                               DOMAIN_DATABASES.nicheTerms?.[niche] || 
+                               DOMAIN_DATABASES.nicheVariations?.[niche] || [];
+                if (keywords.length > 0) {
+                    contextExamples.push(`- ${niche}: ${keywords.slice(0, 4).join(', ')}`);
+                }
+            }
+            
+            const prompt = `You are a niche mapping expert. Given a search term, determine which of the available niches it best matches.
+
+Search term: "${searchTerm}"
+
+Available niches: ${availableNiches.join(', ')}
+
+Niche keywords context:
+${contextExamples.join('\n')}
+
+Rules:
+1. Return ONLY the exact niche name from the available list
+2. Consider semantic meaning and related keywords
+3. Think about what products/services the search term relates to
+4. If no good match exists, return "none"
+
+Examples:
+- "lawn mower" → "backyard" (lawn care is backyard-related)
+- "projector" → "man cave" (home theater equipment)
+- "cookware" → "kitchen" (cooking equipment)
+- "thermostat" → "smart home" (home automation device)
+- "massage chair" → "wellness" (health and recovery related)
+- "boat anchor" → "marine" (boating equipment)
+
+Niche:`;
+
+            const response = await this.openai.chat.completions.create({
+                model: "gpt-3.5-turbo",
+                messages: [{ role: "user", content: prompt }],
+                max_tokens: 50,
+                temperature: 0.1
+            });
+
+            const result = response.choices[0]?.message?.content?.trim();
+            console.log(`🤖 AI response for "${searchTerm}":`, result);
+            
+            // Validate that the result is actually one of our available niches
+            if (result && result !== "none" && availableNiches.includes(result)) {
+                console.log(`✅ AI mapped "${searchTerm}" → "${result}"`);
+                return result;
+            } else if (result && result !== "none") {
+                console.log(`❌ AI returned "${result}" but it's not in available niches:`, availableNiches.join(', '));
+            }
+            
+            return null;
+        } catch (error) {
+            console.log('AI niche mapping failed:', error.message);
+            return null;
+        }
+    }
+
+    // Dynamic Niche Caching System
+    // Save successful unknown niche results to build knowledge base over time
+    async saveDynamicNiche(originalNiche, canonicalNiche, competitors, metadata = {}) {
+        if (!Array.isArray(competitors) || competitors.length === 0) return false;
+        
+        try {
+            const sqlite3 = require('sqlite3').verbose();
+            const db = new sqlite3.Database('./domains.db');
+            
+            // Create table if it doesn't exist
+            await new Promise((resolve, reject) => {
+                db.run(`CREATE TABLE IF NOT EXISTS dynamic_niches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    original_niche TEXT NOT NULL,
+                    canonical_niche TEXT,
+                    competitors TEXT NOT NULL,
+                    metadata TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    use_count INTEGER DEFAULT 1,
+                    success_rate REAL DEFAULT 1.0
+                )`, (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+            
+            // Save the niche data
+            const competitorsJson = JSON.stringify(competitors);
+            const metadataJson = JSON.stringify(metadata);
+            
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `INSERT OR REPLACE INTO dynamic_niches 
+                     (original_niche, canonical_niche, competitors, metadata, last_used) 
+                     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+                    [originalNiche.toLowerCase(), canonicalNiche, competitorsJson, metadataJson],
+                    (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            });
+            
+            db.close();
+            console.log(`💾 Cached niche: "${originalNiche}" → "${canonicalNiche}" with ${competitors.length} competitors`);
+            return true;
+            
+        } catch (error) {
+            console.log('Failed to save dynamic niche:', error.message);
+            return false;
+        }
+    }
+    
+    // Retrieve cached niche results
+    async getCachedNiche(niche) {
+        try {
+            const sqlite3 = require('sqlite3').verbose();
+            const db = new sqlite3.Database('./domains.db');
+            
+            const result = await new Promise((resolve, reject) => {
+                db.get(
+                    `SELECT * FROM dynamic_niches 
+                     WHERE original_niche = ? 
+                     ORDER BY last_used DESC LIMIT 1`,
+                    [niche.toLowerCase()],
+                    (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row);
+                    }
+                );
+            });
+            
+            if (result) {
+                // Update usage stats
+                await new Promise((resolve, reject) => {
+                    db.run(
+                        `UPDATE dynamic_niches 
+                         SET last_used = CURRENT_TIMESTAMP, use_count = use_count + 1 
+                         WHERE id = ?`,
+                        [result.id],
+                        (err) => {
+                            if (err) reject(err);
+                            else resolve();
+                        }
+                    );
+                });
+                
+                db.close();
+                
+                const competitors = JSON.parse(result.competitors || '[]');
+                const metadata = JSON.parse(result.metadata || '{}');
+                
+                console.log(`📋 Retrieved cached niche: "${niche}" (used ${result.use_count} times)`);
+                return {
+                    originalNiche: result.original_niche,
+                    canonicalNiche: result.canonical_niche,
+                    competitors,
+                    metadata,
+                    lastUsed: result.last_used,
+                    useCount: result.use_count
+                };
+            }
+            
+            db.close();
+            return null;
+            
+        } catch (error) {
+            console.log('Failed to get cached niche:', error.message);
+            return null;
+        }
+    }
+    
+    // Get all cached niches for admin/debugging
+    async getAllCachedNiches() {
+        try {
+            const sqlite3 = require('sqlite3').verbose();
+            const db = new sqlite3.Database('./domains.db');
+            
+            const results = await new Promise((resolve, reject) => {
+                db.all(
+                    `SELECT original_niche, canonical_niche, use_count, last_used 
+                     FROM dynamic_niches 
+                     ORDER BY use_count DESC, last_used DESC`,
+                    (err, rows) => {
+                        if (err) reject(err);
+                        else resolve(rows);
+                    }
+                );
+            });
+            
+            db.close();
+            return results || [];
+            
+        } catch (error) {
+            console.log('Failed to get all cached niches:', error.message);
+            return [];
+        }
+    }
+    
+    // Enhanced competitor search with caching
+    async getVerifiedCompetitorsWithCache(niche, options = {}) {
+        const normalizedNiche = this.normalizeNiche(niche);
+        
+        // 1. Check cache first
+        const cached = await this.getCachedNiche(normalizedNiche);
+        if (cached && cached.competitors.length > 0) {
+            // Quick verify cached competitors are still live
+            const verified = [];
+            for (const competitor of cached.competitors.slice(0, 5)) {
+                try {
+                    const exists = await this.verifyStoreExists(competitor, { fastVerify: true, silentFail: true });
+                    if (exists) {
+                        verified.push({ ...competitor, source: 'cached' });
+                    }
+                } catch (_) {}
+            }
+            
+            if (verified.length > 0) {
+                console.log(`✅ Using ${verified.length} cached competitors for "${niche}"`);
+                return verified;
+            }
+        }
+        
+        // 2. If no cache or cached results are stale, search fresh
+        console.log(`🔍 Fresh search for "${niche}" (no valid cache)`);
+        const freshResults = await this.getVerifiedCompetitors(niche, { ...options, silentFail: true });
+        
+        // 3. Cache successful results for future use
+        if (freshResults && freshResults.length > 0) {
+            const metadata = {
+                searchTime: new Date().toISOString(),
+                resultCount: freshResults.length,
+                searchOptions: options
+            };
+            await this.saveDynamicNiche(normalizedNiche, normalizedNiche, freshResults, metadata);
+        }
+        
+        return freshResults || [];
     }
 }
 

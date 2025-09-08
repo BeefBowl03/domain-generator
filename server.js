@@ -173,8 +173,8 @@ async function quickVerifyStores(stores, niche, limit = 12) {
             }
           }
           
-          // For other stores, apply full verification
-          const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true });
+          // For other stores, apply full verification (silent for AI-generated)
+          const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true, silentFail: true, isAIGenerated: true });
           if (!exists) return;
           const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: isKnownStore });
           if (!qualifies) return;
@@ -226,7 +226,7 @@ async function auditCompetitorsForNiche(niche, timeLimitMs = 120000) {
 
   // Supplement via niche-targeted strict finder if still low and time remains
   if (verified.length < 5 && Date.now() < deadlineAt) {
-    const strict = await competitorFinder.getVerifiedCompetitors(niche, { fast: false, deadlineAt });
+    const strict = await competitorFinder.getVerifiedCompetitorsWithCache(niche, { fast: false, deadlineAt });
     for (const s of (strict || [])) {
       if (verified.length >= 12 || Date.now() >= deadlineAt) break;
       const k = String(s.domain || '').replace(/^https?:\/\//,'').replace(/^www\./,'').toLowerCase();
@@ -275,7 +275,7 @@ async function findCompetitorStores(niche) {
   try {
     console.log(`Finding dropshipping competitors for niche: ${niche}`);
     // Use verified competitors only (live websites)
-    const competitors = await competitorFinder.getVerifiedCompetitors(niche);
+    const competitors = await competitorFinder.getVerifiedCompetitorsWithCache(niche);
     return competitors.slice(0, 5);
   } catch (error) {
     console.error('Error finding dropshipping competitor stores:', error);
@@ -1268,12 +1268,18 @@ app.post('/api/generate-domains', async (req, res) => {
     const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
     // Use EXACT normalized niche only; no fuzzy mapping to avoid unrelated categories
     // Map to canonical niche only through strict, deterministic routing
-    const canonicalNiche = (function() {
+    const canonicalNiche = await (async function() {
       try {
         if (competitorFinder && typeof competitorFinder.mapToCanonicalNicheSafe === 'function') {
-          return competitorFinder.mapToCanonicalNicheSafe(normalizedNiche);
+          const mapped = await competitorFinder.mapToCanonicalNicheSafe(normalizedNiche);
+          if (mapped !== normalizedNiche) {
+            console.log(`🎯 Niche mapping: "${normalizedNiche}" → "${mapped}"`);
+          }
+          return mapped;
         }
-      } catch (_) {}
+      } catch (error) {
+        console.log(`❌ Niche mapping error:`, error.message);
+      }
       return normalizedNiche;
     })();
     
@@ -1447,7 +1453,7 @@ app.post('/api/generate-domains', async (req, res) => {
       const fastDeadlineAt = Date.now() + 60000; // ~60s budget
       const competitorsPromise = (async () => {
         try {
-          return await competitorFinder.getVerifiedCompetitors(canonicalNiche, { fast: true, deadlineAt: fastDeadlineAt, maxAttempts: 1 });
+          return await competitorFinder.getVerifiedCompetitorsWithCache(canonicalNiche, { fast: true, deadlineAt: fastDeadlineAt, maxAttempts: 1 });
         } catch (_) {
           return [];
         }
@@ -1553,7 +1559,7 @@ app.post('/api/generate-domains', async (req, res) => {
       if (competitors.length < 5) {
         try {
           const deadlineAt = Date.now() + 12000; // ~12s budget for serverless
-          const aiFast = await competitorFinder.getVerifiedCompetitors(canonicalNiche, { fast: true, deadlineAt, maxAttempts: 1 });
+          const aiFast = await competitorFinder.getVerifiedCompetitorsWithCache(canonicalNiche, { fast: true, deadlineAt, maxAttempts: 1 });
           const seen = new Set(competitors.map(c => String(c.domain || '').replace(/^www\./,'').toLowerCase()));
           for (const s of (aiFast || [])) {
             const k = String(s.domain || '').replace(/^www\./,'').toLowerCase();
@@ -1588,7 +1594,7 @@ app.post('/api/generate-domains', async (req, res) => {
             await Promise.all(batch.map(async (c) => {
               if (isTimedOut()) return;
               try {
-                const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true });
+                const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true, silentFail: true, isAIGenerated: true });
                 if (!exists) return;
                 const key = String(c.domain || '').replace(/^www\./,'').toLowerCase();
                 const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: knownSet.has(key) });
@@ -1686,7 +1692,7 @@ app.post('/api/generate-domains', async (req, res) => {
     // Background AI generation with timeout
     const aiGenerationPromise = (async () => {
       try {
-        const strict = await competitorFinder.getVerifiedCompetitors(canonicalNiche, { fast: false, deadlineAt });
+        const strict = await competitorFinder.getVerifiedCompetitorsWithCache(canonicalNiche, { fast: false, deadlineAt });
         return strict || [];
       } catch (error) {
         console.log('AI generation error:', error.message);
@@ -2197,6 +2203,24 @@ app.use((error, req, res, next) => {
     error: error.message || 'An unexpected server error occurred',
     debug: process.env.NODE_ENV === 'development' ? errorDetails : undefined
   });
+});
+
+// Admin endpoint to view cached niches
+app.get('/api/admin/cached-niches', async (req, res) => {
+  try {
+    const cachedNiches = await competitorFinder.getAllCachedNiches();
+    res.json({
+      success: true,
+      count: cachedNiches.length,
+      niches: cachedNiches
+    });
+  } catch (error) {
+    console.error('Error fetching cached niches:', error);
+    res.status(500).json({
+      error: 'Failed to fetch cached niches',
+      message: error.message
+    });
+  }
 });
 
 // Export handler for serverless, only listen locally in non-serverless
