@@ -685,7 +685,32 @@ function removePrefixesAndSuffixesFromKeywords(niche, keywords = []) {
       seen.add(s);
       cleaned.push(s);
     }
-    return cleaned;
+    
+    // FINAL SAFETY: Force all keywords to be premium single words only
+    const premiumWords = new Set([
+      'luxury', 'premium', 'elite', 'exclusive', 'bespoke', 'artisan', 'royal', 'signature',
+      'boutique', 'select', 'premier', 'noble', 'prestige', 'distinguished', 'sovereign',
+      'handcrafted', 'curated', 'refined', 'masterpiece', 'atelier', 'couture', 'deluxe',
+      'opulent', 'exquisite', 'magnificent', 'splendid', 'supreme', 'ultimate', 'grand',
+      'majestic', 'regal', 'imperial', 'executive', 'platinum', 'diamond', 'gold'
+    ]);
+    
+    const cheapWords = new Set([
+      'budget', 'cheap', 'discount', 'sale', 'clearance', 'outlet', 'deal', 'bargain',
+      'wholesale', 'lowcost', 'affordable', 'economy', 'basic', 'standard', 'regular'
+    ]);
+    
+    const processedWords = cleaned
+      .flatMap(keyword => String(keyword).split(/[,\s]+/)) // Split any remaining phrases
+      .map(word => word.trim().toLowerCase())
+      .filter(word => word.length > 2 && /^[a-z]+$/.test(word)) // Only single words, letters only
+      .filter(word => !cheapWords.has(word)); // Remove cheap words
+    
+    // Prioritize premium words first, then add others
+    const premiumFound = processedWords.filter(word => premiumWords.has(word));
+    const otherWords = processedWords.filter(word => !premiumWords.has(word));
+    
+    return [...premiumFound, ...otherWords].slice(0, 8); // Limit to 8 words max
   } catch (_) {
     return keywords || [];
   }
@@ -706,12 +731,22 @@ Provide a JSON response with:
 }
 
 Requirements:
-- industryTerms: Broad terms that describe the entire industry (8-10 terms)
-- nicheKeywords: Specific keywords for domain names (5-7 terms)
+- industryTerms: Broad SINGLE WORDS that describe the entire industry (8-10 single words only)
+- nicheKeywords: PREMIUM SINGLE WORDS only for domain names (5-7 single words, NO PHRASES)
 - productCategories: Main product types sold in this niche
 - Focus on high-ticket items ($500+)
 - Avoid overly specific product names
-- Think about what premium customers would search for`;
+- Think about what premium customers would search for
+
+CRITICAL: nicheKeywords must be PREMIUM single words only that sound expensive and high-end.
+Examples: ["luxury", "elite", "premium", "exclusive", "bespoke", "artisan", "royal", "signature"] 
+NOT basic words like ["furniture", "decor"] or cheap words like ["budget", "discount", "cheap"]
+
+Focus on words that convey:
+- Exclusivity (elite, exclusive, select, premier)
+- Quality (premium, luxury, artisan, signature, bespoke)
+- Status (royal, noble, prestige, distinguished)
+- Craftsmanship (handcrafted, curated, refined, masterpiece)`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -726,7 +761,37 @@ Requirements:
     
     if (jsonStart !== -1 && jsonEnd > jsonStart) {
       const jsonStr = content.substring(jsonStart, jsonEnd);
-      return JSON.parse(jsonStr);
+      const analysis = JSON.parse(jsonStr);
+      
+      // Force nicheKeywords to be premium single words only
+      if (analysis.nicheKeywords && Array.isArray(analysis.nicheKeywords)) {
+        const premiumWords = new Set([
+          'luxury', 'premium', 'elite', 'exclusive', 'bespoke', 'artisan', 'royal', 'signature',
+          'boutique', 'select', 'premier', 'noble', 'prestige', 'distinguished', 'sovereign',
+          'handcrafted', 'curated', 'refined', 'masterpiece', 'atelier', 'couture', 'deluxe',
+          'opulent', 'exquisite', 'magnificent', 'splendid', 'supreme', 'ultimate', 'grand',
+          'majestic', 'regal', 'imperial', 'executive', 'platinum', 'diamond', 'gold'
+        ]);
+        
+        const cheapWords = new Set([
+          'budget', 'cheap', 'discount', 'sale', 'clearance', 'outlet', 'deal', 'bargain',
+          'wholesale', 'lowcost', 'affordable', 'economy', 'basic', 'standard', 'regular'
+        ]);
+        
+        const processedWords = analysis.nicheKeywords
+          .flatMap(keyword => keyword.split(/[,\s]+/)) // Split on commas and spaces
+          .map(word => word.trim().toLowerCase())
+          .filter(word => word.length > 2 && /^[a-z]+$/.test(word)) // Only single words, letters only
+          .filter(word => !cheapWords.has(word)); // Remove cheap words
+        
+        // Prioritize premium words first, then add others
+        const premiumFound = processedWords.filter(word => premiumWords.has(word));
+        const otherWords = processedWords.filter(word => !premiumWords.has(word));
+        
+        analysis.nicheKeywords = [...premiumFound, ...otherWords].slice(0, 7);
+      }
+      
+      return analysis;
     } else {
       throw new Error('No valid JSON found in AI response');
     }
@@ -1543,10 +1608,20 @@ This appears to be an unknown or emerging niche. Please provide comprehensive an
 
 Requirements:
 - Focus on high-ticket items ($500+)
-- Identify 8-10 industry terms that describe the broader market
-- Provide 5-7 specific keywords good for domain names
+- Identify 8-10 SINGLE WORD industry terms that describe the broader market
+- Provide 5-7 PREMIUM SINGLE WORDS only for domain names (NO PHRASES OR MULTI-WORD TERMS)
 - Consider what premium customers would search for
-- Think about what types of stores would sell these products`;
+- Think about what types of stores would sell these products
+
+CRITICAL: nicheKeywords must be PREMIUM single words only that sound expensive and high-end.
+Examples: ["luxury", "elite", "premium", "exclusive", "bespoke", "artisan", "royal", "signature"] 
+NOT basic words like ["furniture", "decor"] or cheap words like ["budget", "discount", "cheap"]
+
+Focus on words that convey:
+- Exclusivity (elite, exclusive, select, premier, boutique)
+- Quality (premium, luxury, artisan, signature, bespoke, refined)
+- Status (royal, noble, prestige, distinguished, sovereign)
+- Craftsmanship (handcrafted, curated, masterpiece, atelier)`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -1562,6 +1637,35 @@ Requirements:
     if (jsonStart !== -1 && jsonEnd > jsonStart) {
       const jsonStr = content.substring(jsonStart, jsonEnd);
       const analysis = JSON.parse(jsonStr);
+      
+      // Force nicheKeywords to be premium single words only
+      if (analysis.nicheKeywords && Array.isArray(analysis.nicheKeywords)) {
+        const premiumWords = new Set([
+          'luxury', 'premium', 'elite', 'exclusive', 'bespoke', 'artisan', 'royal', 'signature',
+          'boutique', 'select', 'premier', 'noble', 'prestige', 'distinguished', 'sovereign',
+          'handcrafted', 'curated', 'refined', 'masterpiece', 'atelier', 'couture', 'deluxe',
+          'opulent', 'exquisite', 'magnificent', 'splendid', 'supreme', 'ultimate', 'grand',
+          'majestic', 'regal', 'imperial', 'executive', 'platinum', 'diamond', 'gold'
+        ]);
+        
+        const cheapWords = new Set([
+          'budget', 'cheap', 'discount', 'sale', 'clearance', 'outlet', 'deal', 'bargain',
+          'wholesale', 'lowcost', 'affordable', 'economy', 'basic', 'standard', 'regular'
+        ]);
+        
+        const processedWords = analysis.nicheKeywords
+          .flatMap(keyword => keyword.split(/[,\s]+/)) // Split on commas and spaces
+          .map(word => word.trim().toLowerCase())
+          .filter(word => word.length > 2 && /^[a-z]+$/.test(word)) // Only single words, letters only
+          .filter(word => !cheapWords.has(word)); // Remove cheap words
+        
+        // Prioritize premium words first, then add others
+        const premiumFound = processedWords.filter(word => premiumWords.has(word));
+        const otherWords = processedWords.filter(word => !premiumWords.has(word));
+        
+        analysis.nicheKeywords = [...premiumFound, ...otherWords].slice(0, 7);
+      }
+      
       console.log(`✅ AI analyzed unknown niche "${niche}":`, analysis);
       return analysis;
     } else {
