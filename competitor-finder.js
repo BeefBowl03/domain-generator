@@ -425,9 +425,9 @@ class CompetitorFinder {
             'organization': ['garage', 'storage', 'cabinet', 'rack'],
 
             // Outdoor/adventure cluster
-            'gear': ['outdoor', 'equipment', 'tools', 'apparatus'],
-            'survival': ['outdoor', 'tactical', 'emergency', 'prep'],
-            'recreation': ['outdoor', 'activity', 'sport', 'leisure'],
+            'gear': ['outdoor', 'equipment', 'tools', 'apparatus', 'backyard'],
+            'survival': ['outdoor', 'tactical', 'emergency', 'prep', 'backyard'],
+            'recreation': ['outdoor', 'activity', 'sport', 'leisure', 'backyard'],
 
             // Marine cluster
             'water': ['marine', 'ocean', 'sea', 'lake'],
@@ -452,10 +452,10 @@ class CompetitorFinder {
             'enhancement': ['wellness', 'improvement', 'upgrade', 'boost', 'health'],
 
             // E-vehicle cluster → automotives
-            'electric': ['automotive', 'ev', 'battery', 'powered', 'vehicle', 'car'],
-            'vehicle': ['automotive', 'car', 'bike', 'scooter', 'auto', 'transport'],
-            'charging': ['automotive', 'charger', 'station', 'power', 'ev'],
-            'mobility': ['automotive', 'transport', 'travel', 'commute', 'vehicle'],
+            'electric': ['garage', 'automotive', 'ev', 'battery', 'powered', 'vehicle', 'car'],
+            'vehicle': ['garage', 'automotive', 'car', 'bike', 'scooter', 'auto', 'transport'],
+            'charging': ['garage', 'automotive', 'charger', 'station', 'power', 'ev'],
+            'mobility': ['garage', 'automotive', 'transport', 'travel', 'commute', 'vehicle'],
 
             // Kitchen/appliances cluster
             'appliance': ['kitchen/appliances', 'kitchen', 'equipment', 'machine', 'device', 'appliances'],
@@ -862,6 +862,29 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         const canonical = aliasToCanonical[input] || null;
         if (canonical && this.knownStores && this.knownStores[canonical]) return canonical;
 
+        // 2b) Priority synonyms/niches (lines 374-390) → canonical niche
+        try {
+            const priority = this.getPrioritySynonymsMap();
+            const lower = input.toLowerCase();
+            
+            // Check if the search keyword matches any synonym in the arrays
+            for (const [niche, synonyms] of Object.entries(priority)) {
+                // Check if keyword matches the niche name itself
+                if (niche.toLowerCase() === lower) {
+                    return niche;
+                }
+                
+                // Check if keyword matches any synonym in the array
+                if (Array.isArray(synonyms)) {
+                    for (const synonym of synonyms) {
+                        if (String(synonym || '').toLowerCase().trim() === lower) {
+                            return niche; // Return the canonical niche
+                        }
+                    }
+                }
+            }
+        } catch (_) {}
+
         // 3) Use DOMAIN_DATABASES.popularNiches synonyms, but require exact token/phrase match and known stores
         try {
             const popular = DOMAIN_DATABASES && DOMAIN_DATABASES.popularNiches ? DOMAIN_DATABASES.popularNiches : {};
@@ -908,6 +931,8 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
                 'living': 'backyard', 'furniture': 'backyard', 'comfort': 'backyard', 'space': 'backyard',
                 // Biohacking → wellness
                 'biohacking': 'wellness', 'recovery': 'wellness', 'monitoring': 'wellness', 'enhancement': 'wellness',
+                // Garage organization
+                'organization': 'garage', 'storage': 'garage',
                 // Golf
                 'golf': 'golf'
             };
@@ -929,6 +954,29 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
 
         // 5) Default: do not remap to avoid unrelated categories
         return input;
+    }
+
+    // Priority synonyms map (exact phrases) — corresponds to lines 374–390
+    getPrioritySynonymsMap() {
+        return {
+            'backyard': ['patio', 'garden', 'yard', 'lawn', 'deck', 'landscape'],
+            'pizza oven': ['outdoor oven', 'wood fired oven', 'pizza', 'oven', 'outdoor cooking', 'backyard cooking'],
+            'drone': ['uav', 'quadcopter', 'aerial', 'drone photography', 'fpv', 'rc drone', 'quad', 'quads', 'multirotor'],
+            'kitchen': ['culinary', 'cooking', 'chef', 'cookware', 'kitchen equipment', 'appliances'],
+            'golf': ['golfing', 'golf equipment', 'golf gear', 'golf clubs', 'golf accessories'],
+            'fitness': ['gym', 'workout', 'exercise', 'training', 'bodybuilding', 'strength'],
+            'marine': ['boat', 'nautical', 'sailing', 'maritime'],
+            'horse riding': ['equestrian', 'equine', 'horse', 'riding', 'horses'],
+            'horse': ['horse riding', 'equestrian', 'equine'],
+            'horses': ['horse riding', 'equestrian', 'equine'],
+            'wellness': ['health', 'fitness', 'nutrition'],
+            'smart home': ['home automation', 'iot', 'connected home'],
+            'outdoor': ['adventure', 'camping', 'hiking'],
+            'garage': ['automotive', 'workshop', 'storage'],
+            'barbecue': ['grilling', 'bbq', 'outdoor cooking'],
+            'man cave': ['mancave', 'den', 'entertainment', 'game room', 'home theater', 'basement'],
+            'mancave': ['man cave', 'den', 'entertainment', 'game room', 'home theater', 'basement']
+        };
     }
 
     // Public: get all known stores across all niches (unique)

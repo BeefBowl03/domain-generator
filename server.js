@@ -161,10 +161,22 @@ async function quickVerifyStores(stores, niche, limit = 12) {
       await Promise.all(batch.map(async (c) => {
         if (!c || !c.domain || verified.length >= limit || isTimedOut()) return;
         try {
+          const key = String(c.domain || '').replace(/^www\./,'').toLowerCase();
+          const isKnownStore = knownSet.has(key);
+          
+          // For known database stores, only check if site exists (less strict)
+          if (isKnownStore) {
+            const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true });
+            if (exists) {
+              verified.push(c);
+              return;
+            }
+          }
+          
+          // For other stores, apply full verification
           const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true });
           if (!exists) return;
-          const key = String(c.domain || '').replace(/^www\./,'').toLowerCase();
-          const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: knownSet.has(key) });
+          const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: isKnownStore });
           if (!qualifies) return;
           const relevant = await competitorFinder.isRelevantToNiche(c, niche, { checkContent: false });
           if (!relevant) return;
