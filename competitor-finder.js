@@ -73,6 +73,27 @@ class CompetitorFinder {
                 { name: 'Seattle Coffee Gear', url: 'https://seattlecoffeegear.com', domain: 'seattlecoffeegear.com' },
                 { name: 'Majesty Coffee', url: 'https://majestycoffee.com', domain: 'majestycoffee.com' }
             ],
+            'embroidery': [
+                { name: 'Sewing Machines Plus', url: 'https://www.sewingmachinesplus.com', domain: 'sewingmachinesplus.com' },
+                { name: 'Embroidery Central', url: 'https://www.embroiderycentral.com', domain: 'embroiderycentral.com' },
+                { name: 'Embroidery Designs', url: 'https://www.embroiderydesigns.com', domain: 'embroiderydesigns.com' },
+                { name: 'Embroidery Machine Warehouse', url: 'https://www.embroiderymachinewarehouse.com', domain: 'embroiderymachinewarehouse.com' },
+                { name: 'AllBrands', url: 'https://www.allbrands.com', domain: 'allbrands.com' }
+            ],
+            'smart home': [
+                { name: 'Smarthome', url: 'https://smarthome.com', domain: 'smarthome.com' },
+                { name: 'The Smartest House', url: 'https://thesmartesthouse.com', domain: 'thesmartesthouse.com' },
+                { name: 'Home Controls', url: 'https://homecontrols.com', domain: 'homecontrols.com' },
+                { name: 'A1 Security Cameras', url: 'https://www.a1securitycameras.com', domain: 'a1securitycameras.com' },
+                { name: 'SpyTec Security', url: 'https://www.spytec.com', domain: 'spytec.com' }
+            ],
+            'marine': [
+                { name: 'West Marine', url: 'https://www.westmarine.com', domain: 'westmarine.com' },
+                { name: 'iBoats', url: 'https://www.iboats.com', domain: 'iboats.com' },
+                { name: 'Wholesale Marine', url: 'https://www.wholesalemarine.com', domain: 'wholesalemarine.com' },
+                { name: 'Fisheries Supply', url: 'https://www.fisheriessupply.com', domain: 'fisheriessupply.com' },
+                { name: 'Defender Marine', url: 'https://www.defender.com', domain: 'defender.com' }
+            ],
             'hvac': [
                 { name: 'Heat & Cool', url: 'https://heatandcool.com', domain: 'heatandcool.com' },
                 { name: 'Alpine Home Air', url: 'https://alpinehomeair.com', domain: 'alpinehomeair.com' },
@@ -201,7 +222,12 @@ class CompetitorFinder {
             'mancave': 'man cave',
             'man cave': 'man cave',
             'home theater': 'man cave',
-            'home theatre': 'man cave'
+            'home theatre': 'man cave',
+            'entertainment': 'man cave',
+            'media room': 'man cave',
+            'media': 'man cave',
+            'game room': 'man cave',
+            'gameroom': 'man cave'
         };
         if (hardMap[input]) return hardMap[input];
 
@@ -333,8 +359,18 @@ class CompetitorFinder {
             variations.add(niche + 's');
         }
         
-        // Add common related terms
-        const relatedTerms = {
+        // Add from central related terms map
+        const relatedTerms = this.getRelatedTermsMap();
+        if (relatedTerms[niche]) {
+            relatedTerms[niche].forEach(term => variations.add(term));
+        }
+
+        return Array.from(variations);
+    }
+
+    // Centralized related terms map so routing and variations share the same source
+    getRelatedTermsMap() {
+        return {
             'backyard': ['patio', 'garden', 'yard', 'lawn', 'deck', 'landscape'],
             'pizza oven': ['outdoor oven', 'wood fired oven', 'pizza', 'oven', 'outdoor cooking', 'backyard cooking'],
             'drone': ['uav', 'quadcopter', 'aerial', 'drone photography', 'fpv', 'rc drone', 'quad', 'quads', 'multirotor'],
@@ -352,12 +388,6 @@ class CompetitorFinder {
             'barbecue': ['grilling', 'bbq', 'outdoor cooking'],
             'man cave': ['mancave', 'den', 'entertainment', 'game room', 'home theater', 'basement'],
             'mancave': ['man cave', 'den', 'entertainment', 'game room', 'home theater', 'basement'],
-            // Map common synonyms so non-DB niches find neighbors
-            'electronics': ['gadgets', 'tech', 'consumer electronics', 'smart devices', 'home electronics', 'audio video'],
-            'gadgets': ['electronics', 'tech gadgets', 'consumer electronics', 'smart devices'],
-            // Landscape synonyms should route to backyard ecosystems
-            'landscape': ['backyard', 'garden', 'yard', 'lawn', 'patio', 'deck', 'landscaping'],
-            'landscaping': ['backyard', 'garden', 'yard', 'lawn', 'patio', 'deck', 'landscape'],
 
             // Database-driven type words → canonical niches
             // Backyard cluster
@@ -409,35 +439,29 @@ class CompetitorFinder {
             'stable': ['horse riding', 'barn', 'arena', 'paddock'],
             'training': ['horse riding', 'dressage', 'jumping', 'competition'],
 
-            // Home & living cluster (map to backyard/outdoor or kitchen where useful)
+            // Home & living cluster
             'living': ['home decor', 'interior', 'design', 'decor'],
             'furniture': ['home decor', 'seating', 'table', 'storage'],
             'comfort': ['home decor', 'luxury', 'premium', 'quality'],
             'space': ['home decor', 'room', 'area', 'environment'],
 
             // Biohacking cluster → wellness
-            'biohacking': ['wellness', 'optimization', 'enhancement', 'performance'],
-            'recovery': ['wellness', 'regeneration', 'restoration', 'healing'],
-            'monitoring': ['wellness', 'tracking', 'measurement', 'data'],
-            'enhancement': ['wellness', 'improvement', 'upgrade', 'boost'],
+            'biohacking': ['wellness', 'optimization', 'enhancement', 'performance', 'health', 'biohack'],
+            'recovery': ['wellness', 'regeneration', 'restoration', 'healing', 'health'],
+            'monitoring': ['wellness', 'tracking', 'measurement', 'data', 'health'],
+            'enhancement': ['wellness', 'improvement', 'upgrade', 'boost', 'health'],
 
-            // E-vehicle cluster → garage/automotive
-            'electric': ['garage', 'ev', 'battery', 'powered'],
-            'vehicle': ['garage', 'car', 'bike', 'scooter'],
-            'charging': ['garage', 'charger', 'station', 'power'],
-            'mobility': ['garage', 'transport', 'travel', 'commute'],
+            // E-vehicle cluster → automotives
+            'electric': ['automotive', 'ev', 'battery', 'powered', 'vehicle', 'car'],
+            'vehicle': ['automotive', 'car', 'bike', 'scooter', 'auto', 'transport'],
+            'charging': ['automotive', 'charger', 'station', 'power', 'ev'],
+            'mobility': ['automotive', 'transport', 'travel', 'commute', 'vehicle'],
 
             // Kitchen/appliances cluster
-            'appliance': ['kitchen', 'equipment', 'machine', 'device'],
-            'cooking': ['kitchen', 'baking', 'roasting', 'preparation'],
-            'professional': ['kitchen', 'commercial', 'grade', 'quality']
+            'appliance': ['kitchen/appliances', 'kitchen', 'equipment', 'machine', 'device', 'appliances'],
+            'cooking': ['kitchen/appliances', 'kitchen', 'baking', 'roasting', 'preparation', 'appliances'],
+            'professional': ['kitchen/appliances', 'kitchen', 'commercial', 'grade', 'quality', 'appliances']
         };
-
-        if (relatedTerms[niche]) {
-            relatedTerms[niche].forEach(term => variations.add(term));
-        }
-
-        return Array.from(variations);
     }
 
     // Build a set of niche-related keywords (original + variations)
@@ -759,6 +783,154 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         return this.buildWideKnownCandidates(canonical);
     }
 
+    // Public: get known stores for EXACT normalized niche key only (no fuzzy mapping)
+    getKnownStoresExact(niche) {
+        const n = this.normalizeNiche(niche);
+        const list = this.knownStores && this.knownStores[n] ? this.knownStores[n] : [];
+        return Array.isArray(list) ? [...list] : [];
+    }
+
+    // Safe, deterministic routing of user input to a canonical niche we have stores for.
+    // Only maps when we have an explicit synonym/alias, otherwise returns the input.
+    mapToCanonicalNicheSafe(niche) {
+        const input = this.normalizeNiche(niche);
+        if (!input) return input;
+
+        // 1) Exact known
+        if (this.knownStores && this.knownStores[input]) return input;
+
+        // 2) Curated alias map (STRICT; no fuzzy contains)
+        const aliasToCanonical = {
+            'fire pit': 'backyard',
+            'firepit': 'backyard',
+            'fire pits': 'backyard',
+            'bbq': 'backyard',
+            'grill': 'backyard',
+            'grilling': 'backyard',
+            'outdoor kitchen': 'backyard',
+            'garden': 'backyard',
+            'patio': 'backyard',
+
+            'home theater': 'man cave',
+            'home theatre': 'man cave',
+            'mancave': 'man cave',
+            'man cave': 'man cave',
+
+            'saunas': 'sauna',
+            'sauna': 'sauna',
+
+            'pizza ovens': 'pizza oven',
+            'pizza oven': 'pizza oven',
+
+            'exercise equipment': 'exercise equipment',
+            'home gym': 'fitness',
+            'strength': 'fitness',
+            'muscle': 'fitness',
+            'cardio': 'fitness',
+
+            'hvac': 'hvac',
+            'air conditioner': 'hvac',
+            'air conditioning': 'hvac',
+
+            'drones': 'drones',
+            'drone': 'drones',
+
+            'generators': 'generators',
+            'generator': 'generators',
+
+            'horse riding': 'horse riding',
+            'equestrian': 'horse riding',
+
+            'safes': 'safes',
+            'safe': 'safes',
+
+            'solar': 'solar',
+
+            'wellness': 'wellness',
+            'health': 'wellness',
+            'recovery': 'wellness',
+            'therapy': 'wellness',
+            'massage': 'wellness',
+            'meditation': 'wellness',
+            'zen': 'wellness',
+            'mindfulness': 'wellness',
+            'calm': 'wellness',
+
+            'kitchen': 'kitchen',
+        };
+
+        const canonical = aliasToCanonical[input] || null;
+        if (canonical && this.knownStores && this.knownStores[canonical]) return canonical;
+
+        // 3) Use DOMAIN_DATABASES.popularNiches synonyms, but require exact token/phrase match and known stores
+        try {
+            const popular = DOMAIN_DATABASES && DOMAIN_DATABASES.popularNiches ? DOMAIN_DATABASES.popularNiches : {};
+            const lower = input.toLowerCase();
+            for (const key of Object.keys(popular)) {
+                if (!this.knownStores || !this.knownStores[key]) continue;
+                const syns = Array.isArray(popular[key].synonyms) ? popular[key].synonyms : [];
+                const phrases = new Set([key, ...syns].map(s => String(s || '').toLowerCase().trim()));
+                if (phrases.has(lower)) return key;
+            }
+        } catch (_) {}
+
+        // 4) Token voting based on broad cluster terms → canonical niches we actually support
+        try {
+            const tokenToCanonical = {
+                // Backyard cluster
+                'backyard': 'backyard', 'yard': 'backyard', 'garden': 'backyard', 'patio': 'backyard', 'deck': 'backyard', 'landscape': 'backyard',
+                'bbq': 'backyard', 'barbecue': 'backyard', 'grill': 'backyard', 'smoker': 'backyard', 'fire': 'backyard', 'pool': 'backyard', 'landscaping': 'backyard',
+                // Fitness cluster
+                'fitness': 'fitness', 'gym': 'fitness', 'workout': 'fitness', 'exercise': 'fitness', 'training': 'fitness', 'strength': 'fitness', 'muscle': 'fitness', 'cardio': 'fitness', 'bodybuilding': 'fitness',
+                // Wellness cluster
+                'wellness': 'wellness', 'health': 'wellness', 'recovery': 'wellness', 'therapy': 'wellness', 'massage': 'wellness', 'meditation': 'wellness', 'zen': 'wellness', 'mindfulness': 'wellness', 'calm': 'wellness', 'sauna': 'sauna',
+                // Smart home
+                'smart': 'smart home', 'home': 'smart home', 'security': 'smart home', 'lighting': 'smart home', 'climate': 'smart home', 'thermostat': 'smart home', 'iot': 'smart home', 'electronics': 'smart home', 'gadgets': 'smart home', 'audio': 'smart home', 'video': 'smart home',
+                // Man cave / home theater
+                'theater': 'man cave', 'theatre': 'man cave', 'projector': 'man cave', 'seating': 'man cave',
+                // Kitchen
+                'kitchen': 'kitchen', 'appliance': 'kitchen', 'cooking': 'kitchen', 'chef': 'kitchen',
+                // Marine
+                'marine': 'marine', 'boat': 'marine', 'nautical': 'marine', 'sailing': 'marine', 'yacht': 'marine', 'water': 'marine', 'ocean': 'marine', 'sea': 'marine', 'lake': 'marine', 'fishing': 'marine', 'angling': 'marine', 'tackle': 'marine', 'navigation': 'marine', 'gps': 'marine', 'compass': 'marine', 'chart': 'marine',
+                // Drones
+                'drone': 'drones', 'drones': 'drones', 'uav': 'drones', 'quadcopter': 'drones', 'fpv': 'drones',
+                // Safes
+                'safe': 'safes', 'safes': 'safes', 'vault': 'safes',
+                // Power
+                'solar': 'solar', 'generator': 'generators', 'generators': 'generators',
+                // HVAC
+                'hvac': 'hvac', 'heating': 'hvac', 'cooling': 'hvac', 'air': 'hvac',
+                // Outdoor/adventure
+                'outdoor': 'outdoor', 'gear': 'outdoor', 'survival': 'outdoor', 'recreation': 'outdoor',
+                // Equestrian
+                'equestrian': 'horse riding', 'equine': 'horse riding', 'horse': 'horse riding', 'riding': 'horse riding', 'stable': 'horse riding', 'training': 'horse riding',
+                // Home & living → route to backyard as a general home/outdoor category
+                'living': 'backyard', 'furniture': 'backyard', 'comfort': 'backyard', 'space': 'backyard',
+                // Biohacking → wellness
+                'biohacking': 'wellness', 'recovery': 'wellness', 'monitoring': 'wellness', 'enhancement': 'wellness',
+                // Golf
+                'golf': 'golf'
+            };
+
+            const tokens = String(input).split(/[^a-z0-9]+/i).map(t => t.trim().toLowerCase()).filter(Boolean);
+            const scores = {};
+            for (const t of tokens) {
+                const canon = tokenToCanonical[t];
+                if (!canon) continue;
+                if (!this.knownStores || !this.knownStores[canon]) continue;
+                scores[canon] = (scores[canon] || 0) + 1;
+            }
+            let best = null; let bestScore = 0;
+            for (const [canon, score] of Object.entries(scores)) {
+                if (score > bestScore) { bestScore = score; best = canon; }
+            }
+            if (best) return best;
+        } catch (_) {}
+
+        // 5) Default: do not remap to avoid unrelated categories
+        return input;
+    }
+
     // Public: get all known stores across all niches (unique)
     getKnownStoresGlobal() {
         const unique = new Map();
@@ -771,6 +943,63 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
             }
         }
         return Array.from(unique.values());
+    }
+
+    // Last-resort: find at least one plausible competitor by scoring global known stores
+    async getOneFallbackCompetitor(niche) {
+        try {
+            const keywords = Array.from(this.buildNicheKeywordSet(niche) || []);
+            const lower = (v) => String(v || '').toLowerCase();
+            const scoreFor = (store) => {
+                const fields = [lower(store && store.name), lower(store && store.domain), lower(store && store.url)];
+                let score = 0;
+                for (const k of keywords) {
+                    for (const f of fields) {
+                        if (f && f.includes(k)) score += 2;
+                    }
+                }
+                return score;
+            };
+            const candidates = this.getKnownStoresGlobal()
+                .map(s => ({ s, score: scoreFor(s) }))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 20)
+                .map(x => x.s)
+                .filter(c => this.isRelevantToNiche(c, niche, { checkContent: false }));
+
+            // Pass 1: require relevance + high-ticket/dropship
+            for (const c of candidates) {
+                try {
+                    const exists = await this.verifyStoreExists(c, { fastVerify: true });
+                    if (!exists) continue;
+                    const qualifies = await this.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
+                    if (!qualifies) continue;
+                    const relevant = await this.isRelevantToNiche(c, niche, { checkContent: false });
+                    if (!relevant) continue;
+                    return c;
+                } catch (_) {}
+            }
+
+            // Pass 2: drop relevance requirement, keep high-ticket/dropship
+            for (const c of candidates) {
+                try {
+                    const exists = await this.verifyStoreExists(c, { fastVerify: true });
+                    if (!exists) continue;
+                    const qualifies = await this.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
+                    if (!qualifies) continue;
+                    return c;
+                } catch (_) {}
+            }
+
+            // Pass 3: return first reachable store (quality last resort)
+            for (const c of candidates) {
+                try {
+                    const exists = await this.verifyStoreExists(c, { fastVerify: true });
+                    if (exists) return c;
+                } catch (_) {}
+            }
+        } catch (_) {}
+        return null;
     }
 
     // Method to get verified competitors. Supports options:
@@ -786,37 +1015,62 @@ Find real dropshipping stores in the ${niche} space that sell high-ticket items.
         const isTimedOut = () => (deadlineAt && Date.now() >= deadlineAt);
 
         if (fast) {
-            // 1) Use known stores for niche or variations without verification
-            const fromKnown = [];
-            if (this.knownStores[normalized]) fromKnown.push(...this.knownStores[normalized]);
+            // Build a quick candidate list from exact/variation known stores
+            const candidates = [];
+            const pushUnique = (s) => {
+                if (!s || !s.domain) return;
+                const key = (s.domain || '').replace(/^www\./, '').toLowerCase();
+                if (seenDomains.has(key)) return;
+                seenDomains.add(key);
+                candidates.push(s);
+            };
+            if (this.knownStores[normalized]) (this.knownStores[normalized] || []).forEach(pushUnique);
             const variations = this.getNicheVariations(normalized);
             for (const v of variations) {
-                if (fromKnown.length >= 5) break;
-                if (this.knownStores[v]) {
-                    for (const s of this.knownStores[v]) {
-                        const key = (s.domain || '').replace(/^www\./, '').toLowerCase();
-                        if (!seenDomains.has(key)) {
-                            fromKnown.push(s);
-                            seenDomains.add(key);
-                            if (fromKnown.length >= 5) break;
-                        }
+                if (candidates.length >= 8) break; // cap
+                if (this.knownStores[v]) (this.knownStores[v] || []).forEach(pushUnique);
+            }
+
+            // Supplement with a single quick AI pass
+            try {
+                const ai = await this.searchOnlineCompetitors(niche);
+                for (const comp of ai) {
+                    if (candidates.length >= 16) break;
+                    pushUnique(comp);
+                }
+                // Also try a few niche variations in parallel within the time budget
+                const varSlice = variations.slice(0, 4);
+                const varResults = await Promise.all(varSlice.map(v => this.searchOnlineCompetitors(v)));
+                for (const list of varResults) {
+                    for (const comp of (list || [])) {
+                        if (candidates.length >= 20) break;
+                        pushUnique(comp);
                     }
                 }
-            }
-            if (fromKnown.length >= 5) return fromKnown.slice(0, 5);
+            } catch (_) {}
 
-            // 2) Supplement with AI without verification (fast model)
-            const ai = await this.searchOnlineCompetitors(niche);
-            const combined = [...fromKnown];
-            for (const comp of ai) {
-                if (combined.length >= 5) break;
-                const key = (comp.domain || '').replace(/^www\./, '').toLowerCase();
-                if (!seenDomains.has(key)) {
-                    combined.push(comp);
-                    seenDomains.add(key);
-                }
+            // Fast verification: require site reachable AND dropship/high-ticket hints if possible
+            const verifiedFast = [];
+            const deadlineAtFast = typeof options.deadlineAt === 'number' ? options.deadlineAt : (Date.now() + 60000);
+            const isTimedOutFast = () => Date.now() >= deadlineAtFast;
+            const batchSizeFast = 6;
+            for (let i = 0; i < candidates.length && !isTimedOutFast() && verifiedFast.length < 5; i += batchSizeFast) {
+                const batch = candidates.slice(i, i + batchSizeFast);
+                await Promise.all(batch.map(async (c) => {
+                    if (verifiedFast.length >= 5 || isTimedOutFast()) return;
+                    try {
+                        const exists = await this.verifyStoreExists(c, { fastVerify: true });
+                        if (!exists) return;
+                        const qualifies = await this.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: true });
+                        if (!qualifies) return;
+                        // Enforce shallow relevance to the input niche
+                        const relevant = await this.isRelevantToNiche(c, normalized, { checkContent: false });
+                        if (!relevant) return;
+                        verifiedFast.push(c);
+                    } catch (_) {}
+                }));
             }
-            return combined.slice(0, 5);
+            return verifiedFast.slice(0, 5);
         }
 
         const tryAdd = async (list = []) => {

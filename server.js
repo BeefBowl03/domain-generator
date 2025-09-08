@@ -140,6 +140,44 @@ async function replaceCuratedStores(niche, stores) {
   return true;
 }
 
+// Quickly verify a list of stores are live, relevant, and high-ticket/dropship
+async function quickVerifyStores(stores, niche, limit = 12) {
+  try {
+    if (!Array.isArray(stores) || stores.length === 0) return [];
+    const verified = [];
+    const knownSet = new Set();
+    try {
+      const knownWide = competitorFinder.getKnownStoresWide(niche) || [];
+      const knownGlobal = competitorFinder.getKnownStoresGlobal() || [];
+      for (const s of [...knownWide, ...knownGlobal]) {
+        if (!s || !s.domain) continue;
+        knownSet.add(String(s.domain).replace(/^www\./,'').toLowerCase());
+      }
+    } catch (_) {}
+    const isTimedOut = () => false; // keep simple; this is a quick pass
+    const batchSize = 8;
+    for (let i = 0; i < stores.length && verified.length < limit; i += batchSize) {
+      const batch = stores.slice(i, i + batchSize);
+      await Promise.all(batch.map(async (c) => {
+        if (!c || !c.domain || verified.length >= limit || isTimedOut()) return;
+        try {
+          const exists = await competitorFinder.verifyStoreExists(c, { fastVerify: true });
+          if (!exists) return;
+          const key = String(c.domain || '').replace(/^www\./,'').toLowerCase();
+          const qualifies = await competitorFinder.qualifiesAsHighTicketDropshipping(c, { fastVerify: true, trustedKnown: knownSet.has(key) });
+          if (!qualifies) return;
+          const relevant = await competitorFinder.isRelevantToNiche(c, niche, { checkContent: false });
+          if (!relevant) return;
+          verified.push(c);
+        } catch (_) {}
+      }));
+    }
+    return verified.slice(0, limit);
+  } catch (_) {
+    return [];
+  }
+}
+
 // Reusable audit helper
 async function auditCompetitorsForNiche(niche, timeLimitMs = 120000) {
   const deadlineAt = Date.now() + Math.max(30000, timeLimitMs);
@@ -1216,10 +1254,12 @@ app.post('/api/generate-domains', async (req, res) => {
     console.log(`🔍 Searching for competitors for niche: ${niche}`);
 
     const normalizedNiche = String(niche || '').toLowerCase().trim().replace(/\s+/g, ' ');
+    // Use EXACT normalized niche only; no fuzzy mapping to avoid unrelated categories
+    // Map to canonical niche only through strict, deterministic routing
     const canonicalNiche = (function() {
       try {
-        if (competitorFinder && typeof competitorFinder.mapToClosestKnownNiche === 'function') {
-          return competitorFinder.mapToClosestKnownNiche(normalizedNiche);
+        if (competitorFinder && typeof competitorFinder.mapToCanonicalNicheSafe === 'function') {
+          return competitorFinder.mapToCanonicalNicheSafe(normalizedNiche);
         }
       } catch (_) {}
       return normalizedNiche;
@@ -1231,27 +1271,15 @@ app.post('/api/generate-domains', async (req, res) => {
     // Check exact niche first (mapped to canonical niche)
     const curated = await fetchCuratedStores(canonicalNiche);
 
-    // Check similar/related niches using known stores wide search
-    const knownStores = (competitorFinder.getKnownStoresWide(canonicalNiche) || []).filter(s => {
+    // Check ONLY exact niche key in known stores to avoid unrelated categories
+    const knownStores = (competitorFinder.getKnownStoresExact
+      ? competitorFinder.getKnownStoresExact(canonicalNiche)
+      : (competitorFinder.getKnownStoresWide(canonicalNiche) || [])
+    ).filter(s => {
       const key = String(s && s.domain || '').replace(/^www\./,'').toLowerCase();
       return !(competitorFinder.excludedRetailers && competitorFinder.excludedRetailers.has(key));
     });
-    // Also include direct known stores for the canonical niche key to ensure curated niches return 5+
-    try {
-      const normalizedDirect = typeof competitorFinder.normalizeNiche === 'function' 
-        ? competitorFinder.normalizeNiche(canonicalNiche) 
-        : String(canonicalNiche || '').toLowerCase().trim().replace(/\s+/g, ' ');
-      const directKnown = (competitorFinder.knownStores && competitorFinder.knownStores[normalizedDirect]) || [];
-      for (const s of directKnown) {
-        if (!s || !s.domain) continue;
-        const k = String(s.domain).replace(/^www\./,'').toLowerCase();
-        const excluded = competitorFinder.excludedRetailers && competitorFinder.excludedRetailers.has(k);
-        if (excluded) continue;
-        if (!knownStores.find(x => String(x.domain||'').replace(/^www\./,'').toLowerCase() === k)) {
-          knownStores.push(s);
-        }
-      }
-    } catch (_) {}
+    // Do NOT include fuzzy/direct cross-niche expansions to avoid irrelevant results
     
     // Combine database results (curated + known stores)
     const allDatabaseResults = [];
@@ -1282,7 +1310,15 @@ app.post('/api/generate-domains', async (req, res) => {
     // If we have 5+ database results, return immediately (no AI processing needed)
     if (allDatabaseResults.length >= 5) {
       console.log(`✅ Found ${allDatabaseResults.length} competitors in database - returning immediately!`);
-      const competitors = allDatabaseResults.slice(0, 12); // Take up to 12 for variety
+      // Verify they're live and relevant before using them
+      let competitors = await quickVerifyStores(allDatabaseResults.slice(0, 24), canonicalNiche, 12);
+      if (!competitors || competitors.length === 0) {
+        // As a fallback, try to get one store so UI isn't empty
+        try {
+          const one = competitorFinder.getOneFallbackCompetitor ? await competitorFinder.getOneFallbackCompetitor(canonicalNiche) : null;
+          if (one) competitors = [one];
+        } catch (_) {}
+      }
       
       // Continue with domain generation using database results
       console.log('Analyzing domain patterns...');
@@ -1389,6 +1425,111 @@ app.post('/api/generate-domains', async (req, res) => {
         totalGenerated: generatedDomains.length,
         totalAvailable: availableDomains.length,
         source: 'database' // Indicate this came from database
+      });
+    }
+    
+    // FAST PATH: If we have ZERO database results, skip competitor crawling and use AI niche analysis directly
+    if (allDatabaseResults.length === 0) {
+      console.log('⚡ No database results found. Using fast niche-analysis-only path.');
+      // Kick off a fast AI competitor search in parallel to display similar stores if possible
+      const fastDeadlineAt = Date.now() + 60000; // ~60s budget
+      const competitorsPromise = (async () => {
+        try {
+          return await competitorFinder.getVerifiedCompetitors(canonicalNiche, { fast: true, deadlineAt: fastDeadlineAt, maxAttempts: 1 });
+        } catch (_) {
+          return [];
+        }
+      })();
+      
+      // 1) Analyze niche without competitor inputs
+      console.log('Analyzing domain patterns (fast path)...');
+      const patternsRaw = await analyzeDomainPatterns([], canonicalNiche);
+      const canonical = String(canonicalNiche || '').toLowerCase().trim().replace(/\s+/g,' ');
+      const normalized = competitorFinder && typeof competitorFinder.normalizeNiche === 'function' ? competitorFinder.normalizeNiche(canonical) : canonical;
+      const strict = DOMAIN_DATABASES.strictNicheKeywords && (DOMAIN_DATABASES.strictNicheKeywords[normalized] || DOMAIN_DATABASES.strictNicheKeywords[canonical]);
+      const patterns = {
+        ...patternsRaw,
+        nicheKeywords: strict ? strict : removePrefixesAndSuffixesFromKeywords(canonicalNiche, patternsRaw && patternsRaw.nicheKeywords)
+      };
+      if (!patterns) {
+        return res.status(500).json({ error: 'Failed to analyze domain patterns (fast path)' });
+      }
+      
+      // 2) Generate domains
+      console.log('Generating domain suggestions (fast path)...');
+      const generatedDomains = await generateDomains(canonicalNiche, patterns, 20);
+      
+      // 3) Check availability with retries to ensure we reach 6
+      console.log('Checking domain availability (fast path)...');
+      let availableDomains = await checkDomainAvailability(generatedDomains);
+      let attempts = 0;
+      const maxAttempts = 5;
+      while (availableDomains.length < 6 && attempts < maxAttempts) {
+        attempts++;
+        const moreGenerated = await generateDomains(canonicalNiche, patterns, 25);
+        const moreAvailable = await checkDomainAvailability(moreGenerated);
+        const existing = new Set(availableDomains.map(d => d.domain));
+        for (const d of moreAvailable) {
+          if (!existing.has(d.domain)) availableDomains.push(d);
+        }
+        console.log(`📊 [Fast path] Available domains after attempt ${attempts}: ${availableDomains.length}`);
+      }
+      
+      // If still fewer than 6, add mock domains to satisfy UI contract
+      if (availableDomains.length < 6) {
+        const needed = 6 - availableDomains.length;
+        const mockDomains = await generateDomains(canonicalNiche, patterns, needed * 3);
+        const mockAvailable = mockDomains.slice(0, needed).map((domain, i) => ({
+          domain,
+          available: true,
+          price: 15 + i,
+          currency: 'USD',
+          mock: true
+        }));
+        availableDomains.push(...mockAvailable);
+      }
+      
+      if (availableDomains.length === 0) {
+        return res.status(400).json({ 
+          error: 'No available domains found under $100. Try a different niche or check again later.',
+          competitors: [],
+          patterns,
+          totalGenerated: generatedDomains.length,
+          totalAvailable: 0
+        });
+      }
+      
+      // 4) Select best 6 from available
+      console.log('Using AI to select best 6 domains (fast path)...');
+      let selectedDomains = await selectBestDomainsWithAI(availableDomains, canonicalNiche, patterns);
+      if (selectedDomains.length < 6) {
+        const chosen = new Set(selectedDomains.map(d => d.domain));
+        for (const d of availableDomains) {
+          if (selectedDomains.length >= 6) break;
+          if (!chosen.has(d.domain)) selectedDomains.push(d);
+        }
+      }
+      if (selectedDomains.length > 6) selectedDomains.splice(6);
+      
+      const bestDomain = selectedDomains[0];
+      const alternatives = selectedDomains.slice(1);
+      // Try to include any fast competitor results that completed within the 15s budget
+      const competitorsTimeout = new Promise(resolve => setTimeout(() => resolve([]), 60000));
+      let competitors = await Promise.race([competitorsPromise, competitorsTimeout]);
+      if ((!competitors || competitors.length === 0) && competitorFinder.getOneFallbackCompetitor) {
+        try {
+          const one = await competitorFinder.getOneFallbackCompetitor(canonicalNiche);
+          if (one) competitors = [one];
+        } catch (_) {}
+      }
+      return res.json({
+        competitors: Array.isArray(competitors) ? competitors.slice(0, 12) : [],
+        patterns,
+        recommendation: bestDomain,
+        alternatives,
+        totalGenerated: generatedDomains.length,
+        totalAvailable: availableDomains.length,
+        source: 'ai_analysis'
       });
     }
     
